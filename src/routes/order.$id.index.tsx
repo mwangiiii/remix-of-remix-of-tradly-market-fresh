@@ -10,7 +10,7 @@ import { getOrder } from "../marketplace/api/mockMarketplaceApi";
 import { formatKes } from "../marketplace/lib/format";
 import type { MarketplaceOrder, OrderStatus } from "../marketplace/types/marketplace";
 
-export const Route = createFileRoute("/orders/$id")({
+export const Route = createFileRoute("/order/$id/")({
   head: () => ({
     meta: [
       { title: "Order — Tradly Market" },

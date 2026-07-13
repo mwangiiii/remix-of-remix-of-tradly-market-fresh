@@ -21,13 +21,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as ProductSlugRouteImport } from './routes/product.$slug'
-import { Route as OrdersIdRouteImport } from './routes/orders.$id'
 import { Route as ListsIdRouteImport } from './routes/lists.$id'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminCategoriesRouteImport } from './routes/admin.categories'
 import { Route as AdminCatalogRouteImport } from './routes/admin.catalog'
+import { Route as OrderIdIndexRouteImport } from './routes/order.$id.index'
 import { Route as OrderIdConfirmationRouteImport } from './routes/order.$id.confirmation'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -90,11 +90,6 @@ const ProductSlugRoute = ProductSlugRouteImport.update({
   path: '/product/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const OrdersIdRoute = OrdersIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => OrdersRoute,
-} as any)
 const ListsIdRoute = ListsIdRouteImport.update({
   id: '/lists/$id',
   path: '/lists/$id',
@@ -125,6 +120,11 @@ const AdminCatalogRoute = AdminCatalogRouteImport.update({
   path: '/admin/catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrderIdIndexRoute = OrderIdIndexRouteImport.update({
+  id: '/order/$id/',
+  path: '/order/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrderIdConfirmationRoute = OrderIdConfirmationRouteImport.update({
   id: '/order/$id/confirmation',
   path: '/order/$id/confirmation',
@@ -138,7 +138,7 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
-  '/orders': typeof OrdersRouteWithChildren
+  '/orders': typeof OrdersRoute
   '/search': typeof SearchRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/catalog': typeof AdminCatalogRoute
@@ -147,11 +147,11 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
-  '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
+  '/order/$id/': typeof OrderIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -160,7 +160,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
-  '/orders': typeof OrdersRouteWithChildren
+  '/orders': typeof OrdersRoute
   '/search': typeof SearchRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/catalog': typeof AdminCatalogRoute
@@ -169,11 +169,11 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
-  '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin': typeof AdminIndexRoute
   '/lists': typeof ListsIndexRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
+  '/order/$id': typeof OrderIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -183,7 +183,7 @@ export interface FileRoutesById {
   '/checkout': typeof CheckoutRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
-  '/orders': typeof OrdersRouteWithChildren
+  '/orders': typeof OrdersRoute
   '/search': typeof SearchRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/catalog': typeof AdminCatalogRoute
@@ -192,11 +192,11 @@ export interface FileRoutesById {
   '/admin/orders': typeof AdminOrdersRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
-  '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
+  '/order/$id/': typeof OrderIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -216,11 +216,11 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/category/$slug'
     | '/lists/$id'
-    | '/orders/$id'
     | '/product/$slug'
     | '/admin/'
     | '/lists/'
     | '/order/$id/confirmation'
+    | '/order/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -238,11 +238,11 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/category/$slug'
     | '/lists/$id'
-    | '/orders/$id'
     | '/product/$slug'
     | '/admin'
     | '/lists'
     | '/order/$id/confirmation'
+    | '/order/$id'
   id:
     | '__root__'
     | '/'
@@ -260,11 +260,11 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/category/$slug'
     | '/lists/$id'
-    | '/orders/$id'
     | '/product/$slug'
     | '/admin/'
     | '/lists/'
     | '/order/$id/confirmation'
+    | '/order/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -274,7 +274,7 @@ export interface RootRouteChildren {
   CheckoutRoute: typeof CheckoutRoute
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
-  OrdersRoute: typeof OrdersRouteWithChildren
+  OrdersRoute: typeof OrdersRoute
   SearchRoute: typeof SearchRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AdminCatalogRoute: typeof AdminCatalogRoute
@@ -287,6 +287,7 @@ export interface RootRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
   ListsIndexRoute: typeof ListsIndexRoute
   OrderIdConfirmationRoute: typeof OrderIdConfirmationRoute
+  OrderIdIndexRoute: typeof OrderIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -375,13 +376,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/orders/$id': {
-      id: '/orders/$id'
-      path: '/$id'
-      fullPath: '/orders/$id'
-      preLoaderRoute: typeof OrdersIdRouteImport
-      parentRoute: typeof OrdersRoute
-    }
     '/lists/$id': {
       id: '/lists/$id'
       path: '/lists/$id'
@@ -424,6 +418,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/order/$id/': {
+      id: '/order/$id/'
+      path: '/order/$id'
+      fullPath: '/order/$id/'
+      preLoaderRoute: typeof OrderIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/order/$id/confirmation': {
       id: '/order/$id/confirmation'
       path: '/order/$id/confirmation'
@@ -434,17 +435,6 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface OrdersRouteChildren {
-  OrdersIdRoute: typeof OrdersIdRoute
-}
-
-const OrdersRouteChildren: OrdersRouteChildren = {
-  OrdersIdRoute: OrdersIdRoute,
-}
-
-const OrdersRouteWithChildren =
-  OrdersRoute._addFileChildren(OrdersRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
@@ -452,7 +442,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutRoute: CheckoutRoute,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
-  OrdersRoute: OrdersRouteWithChildren,
+  OrdersRoute: OrdersRoute,
   SearchRoute: SearchRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   AdminCatalogRoute: AdminCatalogRoute,
@@ -465,6 +455,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
   ListsIndexRoute: ListsIndexRoute,
   OrderIdConfirmationRoute: OrderIdConfirmationRoute,
+  OrderIdIndexRoute: OrderIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
