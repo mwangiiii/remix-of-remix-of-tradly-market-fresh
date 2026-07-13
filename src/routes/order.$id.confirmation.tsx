@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
-import { AppShell } from "../../../marketplace/components/AppShell";
-import { TrustHeader } from "../../../marketplace/components/TrustHeader";
+import { AppShell } from "../marketplace/components/AppShell";
+import { TrustHeader } from "../marketplace/components/TrustHeader";
 import { Check } from "lucide-react";
 
 const searchSchema = z.object({ pr: z.string().optional() });

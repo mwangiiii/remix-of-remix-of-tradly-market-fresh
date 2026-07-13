@@ -1,12 +1,12 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AppShell } from "../../marketplace/components/AppShell";
-import { BrowseHeader } from "../../marketplace/components/BrowseHeader";
-import { CategoryPillRow } from "../../marketplace/components/CategoryPillRow";
-import { ProductCard } from "../../marketplace/components/ProductCard";
-import { SearchBar } from "../../marketplace/components/SearchBar";
-import { getProductsByCategory } from "../../marketplace/api/mockMarketplaceApi";
-import { categories } from "../../marketplace/mockData/categories";
+import { AppShell } from "../marketplace/components/AppShell";
+import { BrowseHeader } from "../marketplace/components/BrowseHeader";
+import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
+import { ProductCard } from "../marketplace/components/ProductCard";
+import { SearchBar } from "../marketplace/components/SearchBar";
+import { getProductsByCategory } from "../marketplace/api/mockMarketplaceApi";
+import { categories } from "../marketplace/mockData/categories";
 
 export const Route = createFileRoute("/category/$slug")({
   head: ({ params }) => {

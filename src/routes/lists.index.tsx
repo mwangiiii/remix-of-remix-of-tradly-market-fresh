@@ -5,7 +5,7 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { getSavedLists } from "../marketplace/api/mockMarketplaceApi";
 import { ChevronRight, ListPlus } from "lucide-react";
 
-export const Route = createFileRoute("/lists")({
+export const Route = createFileRoute("/lists/")({
   head: () => ({ meta: [{ title: "Saved lists — Tradly Market" }, { name: "robots", content: "noindex" }] }),
   component: Lists,
 });
