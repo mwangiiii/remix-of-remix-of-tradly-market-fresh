@@ -196,6 +196,7 @@ function ProductEditor({
   const [schedUnit, setSchedUnit] = useState(value.units[0]?.id ?? "");
   const [schedPrice, setSchedPrice] = useState<number>(value.units[0]?.priceKes ?? 0);
   const [schedFrom, setSchedFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [previewDate, setPreviewDate] = useState(new Date().toISOString().slice(0, 10));
 
   const set = (patch: Partial<MarketplaceProduct>) => onChange({ ...value, ...patch });
   const setUnit = (id: string, patch: Partial<MarketplaceProductUnit>) =>
