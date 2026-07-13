@@ -100,13 +100,14 @@ export async function updateOrderStatus(id: string, next: OrderStatus): Promise<
   const prev = order.status;
   order.status = next;
   const inv = useInventoryStore.getState();
+  const grnRef = `GRN-${order.requestNumber.replace(/^PR-/, "")}`;
   // Fulfill: reservation consumed from available on delivery (GRN)
   if (next === "delivered" && prev !== "delivered" && prev !== "cancelled") {
-    for (const l of order.lines) inv.fulfillReservation(l.productUnitId, l.quantity);
+    for (const l of order.lines) inv.fulfillReservation(l.productUnitId, l.quantity, { orderId: id, reference: grnRef, note: "GRN received" });
   }
   // Cancel: release reservation back to pool
   if (next === "cancelled" && prev !== "delivered" && prev !== "cancelled") {
-    for (const l of order.lines) inv.releaseReservation(l.productUnitId, l.quantity);
+    for (const l of order.lines) inv.releaseReservation(l.productUnitId, l.quantity, { orderId: id, reference: order.requestNumber, note: "Order cancelled" });
   }
   orderStore = [...orderStore];
   return order;
