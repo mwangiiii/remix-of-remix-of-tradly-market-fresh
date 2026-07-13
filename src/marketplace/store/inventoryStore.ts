@@ -77,10 +77,27 @@ const withRecord = (
   return { ...records, [unitId]: { ...mut(cur), updatedAt: now() } };
 };
 
+const makeEvent = (
+  unitId: string,
+  kind: InventoryEventKind,
+  qty: number,
+  meta?: InventoryEventMeta,
+): InventoryEvent => ({
+  id: `iv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  unitId,
+  kind,
+  qty: clamp(qty),
+  timestamp: now(),
+  orderId: meta?.orderId,
+  reference: meta?.reference,
+  note: meta?.note,
+});
+
 export const useInventoryStore = create<InventoryState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       records: initialRecords,
+      events: [],
       setAvailable: (unitId, available) =>
         set((s) => ({ records: withRecord(s.records, unitId, (r) => ({ ...r, available: clamp(available) })) })),
       setReserved: (unitId, reserved) =>
@@ -102,34 +119,42 @@ export const useInventoryStore = create<InventoryState>()(
           delete rest[unitId];
           return { records: rest };
         }),
-      reserve: (unitId, qty) =>
-        set((s) => ({ records: withRecord(s.records, unitId, (r) => ({ ...r, reserved: clamp(r.reserved + qty) })) })),
-      releaseReservation: (unitId, qty) =>
-        set((s) => ({ records: withRecord(s.records, unitId, (r) => ({ ...r, reserved: clamp(r.reserved - qty) })) })),
-      fulfillReservation: (unitId, qty) =>
-        set((s) =>
-          ({ records: withRecord(s.records, unitId, (r) => ({
+      reserve: (unitId, qty, meta) =>
+        set((s) => ({
+          records: withRecord(s.records, unitId, (r) => ({ ...r, reserved: clamp(r.reserved + qty) })),
+          events: [makeEvent(unitId, "reserve", qty, meta), ...s.events].slice(0, 500),
+        })),
+      releaseReservation: (unitId, qty, meta) =>
+        set((s) => ({
+          records: withRecord(s.records, unitId, (r) => ({ ...r, reserved: clamp(r.reserved - qty) })),
+          events: [makeEvent(unitId, "release", qty, meta), ...s.events].slice(0, 500),
+        })),
+      fulfillReservation: (unitId, qty, meta) =>
+        set((s) => ({
+          records: withRecord(s.records, unitId, (r) => ({
             ...r,
             reserved: clamp(r.reserved - qty),
             available: clamp(r.available - qty),
-          })) }),
-        ),
+          })),
+          events: [makeEvent(unitId, "fulfill", qty, meta), ...s.events].slice(0, 500),
+        })),
+      eventsForUnit: (unitId) => get().events.filter((e) => e.unitId === unitId),
     }),
     {
       name: "tradly-marketplace-inventory",
-      version: 2,
-      // Merge persisted records over freshly-seeded defaults so newly-added
-      // products still appear on next boot without clearing existing edits.
+      version: 3,
       merge: (persisted, current) => {
         const p = persisted as Partial<InventoryState> | undefined;
         return {
           ...current,
           records: { ...current.records, ...(p?.records ?? {}) },
+          events: p?.events ?? [],
         } as InventoryState;
       },
     },
   ),
 );
+
 
 export function remainingOf(r: InventoryRecord): number {
   return Math.max(0, r.available - r.reserved);
