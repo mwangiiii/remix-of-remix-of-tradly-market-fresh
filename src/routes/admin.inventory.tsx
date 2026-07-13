@@ -40,6 +40,7 @@ const labelOf = (s: InventoryStatus) => STATUSES.find((x) => x.value === s)!.lab
 
 function InventoryAdmin() {
   const records = useInventoryStore((s) => s.records);
+  const events = useInventoryStore((s) => s.events);
   const setAvailable = useInventoryStore((s) => s.setAvailable);
   const setReserved = useInventoryStore((s) => s.setReserved);
   const setStatus = useInventoryStore((s) => s.setStatus);
@@ -47,6 +48,11 @@ function InventoryAdmin() {
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string | "all">("all");
   const [statusFilter, setStatusFilter] = useState<InventoryStatus | "all">("all");
+  const [logUnit, setLogUnit] = useState<{ unitId: string; productName: string; unitLabel: string } | null>(null);
+  const logEvents = useMemo(
+    () => (logUnit ? events.filter((e) => e.unitId === logUnit.unitId) : []),
+    [events, logUnit],
+  );
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
