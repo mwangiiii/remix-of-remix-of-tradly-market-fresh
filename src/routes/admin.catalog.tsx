@@ -356,6 +356,42 @@ function ProductEditor({
                 )}
               </div>
             </div>
+
+            <div className="mt-3 rounded-xl border border-divider bg-surface p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[12px] font-semibold text-ink">Price on date</p>
+                <input
+                  type="date"
+                  value={previewDate}
+                  onChange={(e) => setPreviewDate(e.target.value)}
+                  className={inputCls + " w-[150px]"}
+                />
+              </div>
+              <ul className="mt-2 divide-y divide-divider">
+                {value.units.map((u) => {
+                  const price = effectivePriceFor(u.id, u.priceKes, scheduledPrices, previewDate);
+                  const isScheduled = price !== u.priceKes;
+                  return (
+                    <li key={u.id} className="flex items-center justify-between py-1.5 text-[12px]">
+                      <span className="text-ink-muted">{u.unitLabel}</span>
+                      <span className="flex items-baseline gap-2">
+                        <span className={`font-semibold tabular-nums ${isScheduled ? "text-trust-deep" : "text-ink"}`}>
+                          {formatKes(price)}
+                        </span>
+                        {isScheduled && (
+                          <span className="rounded-full bg-trust/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-trust-deep">
+                            Scheduled
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-1 text-[11px] text-ink-muted">
+                Shows the price that will apply on the selected day, using the latest schedule effective on or before that date.
+              </p>
+            </div>
           </section>
         </div>
       </div>
