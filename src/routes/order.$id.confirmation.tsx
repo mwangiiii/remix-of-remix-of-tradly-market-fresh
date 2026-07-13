@@ -57,7 +57,7 @@ function OrderConfirmation() {
 
         <div className="mt-6 flex flex-col gap-2">
           <Link
-            to="/orders"
+            to="/orders/$id" params={{ id }}
             className="w-full rounded-full bg-trust px-5 py-3 text-center text-[14px] font-semibold text-trust-foreground"
           >
             View order
