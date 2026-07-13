@@ -264,6 +264,13 @@ function InventoryAdmin() {
                       </span>
                     </MobileField>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setLogUnit({ unitId: unit.id, productName: product.name, unitLabel: unit.unitLabel })}
+                    className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-trust"
+                  >
+                    <History className="h-3.5 w-3.5" /> Reservation history
+                  </button>
                 </li>
               );
             })}
