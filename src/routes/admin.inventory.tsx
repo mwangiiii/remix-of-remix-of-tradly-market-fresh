@@ -193,17 +193,28 @@ function InventoryAdmin() {
                         />
                       </td>
                       <td className="px-3 py-3 text-right">
-                        {pinned && (
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
-                            onClick={() => { setStatus(unit.id, null); toast.success("Status now auto-derived"); }}
+                            onClick={() => setLogUnit({ unitId: unit.id, productName: product.name, unitLabel: unit.unitLabel })}
                             className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"
-                            aria-label="Reset to auto"
-                            title="Reset to auto-derived status"
+                            aria-label="View reservation history"
+                            title="Reservation history"
                           >
-                            <RotateCcw className="h-3.5 w-3.5" />
+                            <History className="h-3.5 w-3.5" />
                           </button>
-                        )}
+                          {pinned && (
+                            <button
+                              type="button"
+                              onClick={() => { setStatus(unit.id, null); toast.success("Status now auto-derived"); }}
+                              className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"
+                              aria-label="Reset to auto"
+                              title="Reset to auto-derived status"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
