@@ -2,13 +2,13 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { Home, ShoppingCart, ListChecks, Package, User } from "lucide-react";
 import { useCartStore, cartCount } from "../store/cartStore";
 
-const tabs = [
+const tabs: { to: string; label: string; icon: typeof Home; exact?: boolean }[] = [
   { to: "/", label: "Home", icon: Home, exact: true },
   { to: "/orders", label: "Orders", icon: Package },
   { to: "/lists", label: "Lists", icon: ListChecks },
   { to: "/cart", label: "Cart", icon: ShoppingCart },
   { to: "/account", label: "Account", icon: User },
-] as const;
+];
 
 export function BottomNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
