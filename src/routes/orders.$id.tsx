@@ -141,7 +141,7 @@ function OrderDetail() {
         <section className="mt-5 rounded-2xl border border-divider bg-surface p-5">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Items</p>
           <ul className="mt-3 divide-y divide-divider">
-            {order.lines.map((l) => (
+            {order.lines.map((l: (typeof order.lines)[number]) => (
               <li key={l.productUnitId} className="flex items-center gap-3 py-3">
                 <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted">
                   <img src={l.thumbnailUrl} alt="" className="h-full w-full object-cover" />

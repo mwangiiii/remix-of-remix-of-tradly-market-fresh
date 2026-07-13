@@ -21,6 +21,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as ProductSlugRouteImport } from './routes/product.$slug'
+import { Route as OrdersIdRouteImport } from './routes/orders.$id'
 import { Route as ListsIdRouteImport } from './routes/lists.$id'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
@@ -89,6 +90,11 @@ const ProductSlugRoute = ProductSlugRouteImport.update({
   path: '/product/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrdersIdRoute = OrdersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => OrdersRoute,
+} as any)
 const ListsIdRoute = ListsIdRouteImport.update({
   id: '/lists/$id',
   path: '/lists/$id',
@@ -132,7 +138,7 @@ export interface FileRoutesByFullPath {
   '/checkout': typeof CheckoutRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
-  '/orders': typeof OrdersRoute
+  '/orders': typeof OrdersRouteWithChildren
   '/search': typeof SearchRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/catalog': typeof AdminCatalogRoute
@@ -141,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/admin/orders': typeof AdminOrdersRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
+  '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
@@ -153,7 +160,7 @@ export interface FileRoutesByTo {
   '/checkout': typeof CheckoutRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
-  '/orders': typeof OrdersRoute
+  '/orders': typeof OrdersRouteWithChildren
   '/search': typeof SearchRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/catalog': typeof AdminCatalogRoute
@@ -162,6 +169,7 @@ export interface FileRoutesByTo {
   '/admin/orders': typeof AdminOrdersRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
+  '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin': typeof AdminIndexRoute
   '/lists': typeof ListsIndexRoute
@@ -175,7 +183,7 @@ export interface FileRoutesById {
   '/checkout': typeof CheckoutRoute
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
-  '/orders': typeof OrdersRoute
+  '/orders': typeof OrdersRouteWithChildren
   '/search': typeof SearchRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin/catalog': typeof AdminCatalogRoute
@@ -184,6 +192,7 @@ export interface FileRoutesById {
   '/admin/orders': typeof AdminOrdersRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
+  '/orders/$id': typeof OrdersIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
@@ -207,6 +216,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/category/$slug'
     | '/lists/$id'
+    | '/orders/$id'
     | '/product/$slug'
     | '/admin/'
     | '/lists/'
@@ -228,6 +238,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/category/$slug'
     | '/lists/$id'
+    | '/orders/$id'
     | '/product/$slug'
     | '/admin'
     | '/lists'
@@ -249,6 +260,7 @@ export interface FileRouteTypes {
     | '/admin/orders'
     | '/category/$slug'
     | '/lists/$id'
+    | '/orders/$id'
     | '/product/$slug'
     | '/admin/'
     | '/lists/'
@@ -262,7 +274,7 @@ export interface RootRouteChildren {
   CheckoutRoute: typeof CheckoutRoute
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
-  OrdersRoute: typeof OrdersRoute
+  OrdersRoute: typeof OrdersRouteWithChildren
   SearchRoute: typeof SearchRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AdminCatalogRoute: typeof AdminCatalogRoute
@@ -363,6 +375,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/orders/$id': {
+      id: '/orders/$id'
+      path: '/$id'
+      fullPath: '/orders/$id'
+      preLoaderRoute: typeof OrdersIdRouteImport
+      parentRoute: typeof OrdersRoute
+    }
     '/lists/$id': {
       id: '/lists/$id'
       path: '/lists/$id'
@@ -415,6 +434,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface OrdersRouteChildren {
+  OrdersIdRoute: typeof OrdersIdRoute
+}
+
+const OrdersRouteChildren: OrdersRouteChildren = {
+  OrdersIdRoute: OrdersIdRoute,
+}
+
+const OrdersRouteWithChildren =
+  OrdersRoute._addFileChildren(OrdersRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
@@ -422,7 +452,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckoutRoute: CheckoutRoute,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
-  OrdersRoute: OrdersRoute,
+  OrdersRoute: OrdersRouteWithChildren,
   SearchRoute: SearchRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   AdminCatalogRoute: AdminCatalogRoute,
