@@ -1,17 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import {
   useInventoryStore,
   remainingOf,
   deriveStatus,
   type InventoryStatus,
+  type InventoryEvent,
 } from "../marketplace/store/inventoryStore";
 import { products } from "../marketplace/mockData/products";
 import { categories } from "../marketplace/mockData/categories";
 import { formatKes } from "../marketplace/lib/format";
 import {
-  ArrowLeft, Package, Search, ShieldCheck, RotateCcw,
+  ArrowLeft, Package, Search, ShieldCheck, RotateCcw, History, X,
+  ArrowDownRight, ArrowUpRight, CheckCircle2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/inventory")({
