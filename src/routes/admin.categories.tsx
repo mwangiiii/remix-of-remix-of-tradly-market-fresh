@@ -1,25 +1,73 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { useCatalogStore, getEffectiveCatalog } from "../marketplace/store/catalogStore";
+import {
+  adminListCategories,
+  adminUpsertCategory,
+  adminDeleteCategory,
+  adminListProducts,
+  type CategoryInput,
+} from "../marketplace/api/adminCatalog";
+import { RequireAdmin } from "@/components/RequireAdmin";
 import type { MarketplaceCategory } from "../marketplace/types/marketplace";
 
 export const Route = createFileRoute("/admin/categories")({
   head: () => ({ meta: [{ title: "Categories — Tradly Admin" }, { name: "robots", content: "noindex" }] }),
-  component: CategoriesAdmin,
+  component: () => (
+    <RequireAdmin>
+      <CategoriesAdmin />
+    </RequireAdmin>
+  ),
 });
 
-function CategoriesAdmin() {
-  const version = useCatalogStore((s) => s.version);
-  const upsertCategory = useCatalogStore((s) => s.upsertCategory);
-  const deleteCategory = useCatalogStore((s) => s.deleteCategory);
+type Draft = CategoryInput & { id?: string };
 
-  const { categories, products } = useMemo(() => getEffectiveCatalog(), [version]);
-  const [draft, setDraft] = useState<MarketplaceCategory | null>(null);
+const slugify = (s: string) =>
+  s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+function CategoriesAdmin() {
+  const qc = useQueryClient();
+
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ["admin", "categories"],
+    queryFn: adminListCategories,
+  });
+  const { data: products = [] } = useQuery({
+    queryKey: ["admin", "products"],
+    queryFn: adminListProducts,
+  });
+
+  const [draft, setDraft] = useState<Draft | null>(null);
+
+  const upsert = useMutation({
+    mutationFn: adminUpsertCategory,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "categories"] });
+      qc.invalidateQueries({ queryKey: ["categories"] });
+      toast.success("Saved");
+      setDraft(null);
+    },
+    onError: (e: Error) => toast.error(e.message ?? "Save failed"),
+  });
+
+  const del = useMutation({
+    mutationFn: adminDeleteCategory,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "categories"] });
+      qc.invalidateQueries({ queryKey: ["categories"] });
+      toast.success("Deleted");
+    },
+    onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
+  });
 
   const start = (c?: MarketplaceCategory) =>
-    setDraft(c ?? { id: `cc-${Date.now()}`, name: "", slug: "", parentId: null, displayOrder: categories.length + 1 });
+    setDraft(
+      c
+        ? { id: c.id, name: c.name, slug: c.slug, parentId: c.parentId, displayOrder: c.displayOrder, isActive: true }
+        : { name: "", slug: "", parentId: null, displayOrder: categories.length + 1, isActive: true },
+    );
 
   return (
     <div className="min-h-screen bg-background text-ink">
@@ -38,7 +86,9 @@ function CategoriesAdmin() {
 
       <main className="mx-auto max-w-5xl px-6 pb-20 pt-6">
         <div className="flex items-center justify-between">
-          <p className="text-[13px] text-ink-muted">{categories.length} categories</p>
+          <p className="text-[13px] text-ink-muted">
+            {isLoading ? "Loading…" : `${categories.length} categories`}
+          </p>
           <button onClick={() => start()} className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-background hover:bg-ink/90"><Plus className="h-4 w-4" /> New category</button>
         </div>
 
@@ -54,20 +104,26 @@ function CategoriesAdmin() {
                 <div className="flex items-center gap-2">
                   <button onClick={() => start(c)} className="rounded-full border border-divider px-3 py-1 text-[12px] font-semibold text-ink hover:border-ink/40">Edit</button>
                   <button
-                    onClick={() => { if (count > 0) return toast.error("Move products first"); if (confirm(`Delete ${c.name}?`)) { deleteCategory(c.id); toast.success("Deleted"); } }}
+                    onClick={() => {
+                      if (count > 0) return toast.error("Move products first");
+                      if (confirm(`Delete ${c.name}?`)) del.mutate(c.id);
+                    }}
                     className="grid h-8 w-8 place-items-center rounded-full text-ink-muted hover:bg-destructive/10 hover:text-destructive"
                   ><Trash2 className="h-3.5 w-3.5" /></button>
                 </div>
               </li>
             );
           })}
+          {!isLoading && categories.length === 0 && (
+            <li className="px-5 py-14 text-center text-ink-muted">No categories yet — create the first one.</li>
+          )}
         </ul>
       </main>
 
       {draft && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setDraft(null)}>
           <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-[16px] font-semibold text-ink">{draft.id.startsWith("cc-") ? "New" : "Edit"} category</h2>
+            <h2 className="text-[16px] font-semibold text-ink">{draft.id ? "Edit" : "New"} category</h2>
             <div className="mt-4 space-y-3">
               <label className="block">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Name</span>
@@ -85,15 +141,16 @@ function CategoriesAdmin() {
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setDraft(null)} className="rounded-full border border-divider px-4 py-2 text-[13px] font-semibold text-ink">Cancel</button>
               <button
+                disabled={upsert.isPending}
                 onClick={() => {
                   if (!draft.name.trim()) return toast.error("Name required");
-                  const slug = draft.slug || draft.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
-                  upsertCategory({ ...draft, slug });
-                  toast.success("Saved");
-                  setDraft(null);
+                  const slug = draft.slug || slugify(draft.name);
+                  upsert.mutate({ ...draft, slug });
                 }}
-                className="rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-background"
-              >Save</button>
+                className="rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-background disabled:opacity-60"
+              >
+                {upsert.isPending ? "Saving…" : "Save"}
+              </button>
             </div>
           </div>
         </div>

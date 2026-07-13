@@ -4,7 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
 import { StatusBadge } from "../marketplace/components/StatusBadge";
-import { getOrders } from "../marketplace/api/mockMarketplaceApi";
+import { getOrders } from "../marketplace/api/marketplaceApi";
 import { useCartStore } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
 import { toast } from "sonner";

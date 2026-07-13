@@ -12,6 +12,7 @@ import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { AuthProvider } from "../contexts/AuthProvider";
 
 function NotFoundComponent() {
   return (
@@ -108,8 +109,10 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
-      <Toaster position="top-center" richColors closeButton={false} />
+      <AuthProvider>
+        <Outlet />
+        <Toaster position="top-center" richColors closeButton={false} />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

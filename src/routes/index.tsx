@@ -5,8 +5,7 @@ import { SearchBar } from "../marketplace/components/SearchBar";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { Wordmark } from "../marketplace/components/BrowseHeader";
-import { getAllProducts, getOrders } from "../marketplace/api/mockMarketplaceApi";
-import { useCatalogVersion } from "../marketplace/store/catalogStore";
+import { getAllProducts, getOrders } from "../marketplace/api/marketplaceApi";
 import { ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -14,9 +13,8 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const catalogVersion = useCatalogVersion();
   const { data: products = [] } = useQuery({
-    queryKey: ["products", catalogVersion],
+    queryKey: ["products"],
     queryFn: getAllProducts,
   });
   const { data: orders = [] } = useQuery({ queryKey: ["orders"], queryFn: getOrders });

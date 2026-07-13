@@ -1,21 +1,24 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import {
-  useInventoryStore,
-  remainingOf,
-  deriveStatus,
-  type InventoryStatus,
-  type InventoryEvent,
-} from "../marketplace/store/inventoryStore";
-import { products } from "../marketplace/mockData/products";
-import { categories } from "../marketplace/mockData/categories";
-import { formatKes } from "../marketplace/lib/format";
-import {
-  ArrowLeft, Package, Search, ShieldCheck, RotateCcw, History, X,
-  ArrowDownRight, ArrowUpRight, CheckCircle2,
+  ArrowLeft, Package, Search, ShieldCheck, History, X,
+  ArrowDownRight, ArrowUpRight, CheckCircle2, SlidersHorizontal,
 } from "lucide-react";
+import {
+  adminListProducts,
+  adminListCategories,
+  adminListInventory,
+  adminListMovements,
+  adminUpsertInventory,
+  type InventoryMovementRow,
+  type InventoryRow,
+} from "../marketplace/api/adminCatalog";
+import { RequireAdmin } from "@/components/RequireAdmin";
+import { formatKes } from "../marketplace/lib/format";
+import type { MarketplaceProductUnit } from "../marketplace/types/marketplace";
 
 export const Route = createFileRoute("/admin/inventory")({
   head: () => ({
@@ -25,34 +28,54 @@ export const Route = createFileRoute("/admin/inventory")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: InventoryAdmin,
+  component: () => (
+    <RequireAdmin>
+      <InventoryAdmin />
+    </RequireAdmin>
+  ),
 });
 
-const STATUSES: { value: InventoryStatus; label: string; tone: string }[] = [
-  { value: "available",    label: "Available",    tone: "bg-farm/12 text-farm border-farm/30" },
-  { value: "low_stock",    label: "Low stock",    tone: "bg-ripe/15 text-[oklch(0.42_0.11_65)] border-ripe/40" },
-  { value: "seasonal",     label: "Seasonal",     tone: "bg-ripe/15 text-[oklch(0.42_0.11_65)] border-ripe/40" },
-  { value: "out_of_stock", label: "Out of stock", tone: "bg-destructive/12 text-destructive border-destructive/30" },
-];
+type AvailabilityFilter = MarketplaceProductUnit["availability"] | "all";
 
-const toneOf = (s: InventoryStatus) => STATUSES.find((x) => x.value === s)!.tone;
-const labelOf = (s: InventoryStatus) => STATUSES.find((x) => x.value === s)!.label;
+const AVAILABILITY_META: Record<
+  MarketplaceProductUnit["availability"],
+  { label: string; tone: string }
+> = {
+  available:    { label: "Available",    tone: "bg-farm/12 text-farm border-farm/30" },
+  low_stock:    { label: "Low stock",    tone: "bg-ripe/15 text-[oklch(0.42_0.11_65)] border-ripe/40" },
+  seasonal:     { label: "Seasonal",     tone: "bg-ripe/15 text-[oklch(0.42_0.11_65)] border-ripe/40" },
+  out_of_stock: { label: "Out of stock", tone: "bg-destructive/12 text-destructive border-destructive/30" },
+};
 
 function InventoryAdmin() {
-  const records = useInventoryStore((s) => s.records);
-  const events = useInventoryStore((s) => s.events);
-  const setAvailable = useInventoryStore((s) => s.setAvailable);
-  const setReserved = useInventoryStore((s) => s.setReserved);
-  const setStatus = useInventoryStore((s) => s.setStatus);
+  const qc = useQueryClient();
+
+  const { data: products = [] } = useQuery({
+    queryKey: ["admin", "products"],
+    queryFn: adminListProducts,
+  });
+  const { data: categories = [] } = useQuery({
+    queryKey: ["admin", "categories"],
+    queryFn: adminListCategories,
+  });
+  const { data: inventory = {}, isLoading: invLoading } = useQuery({
+    queryKey: ["admin", "inventory"],
+    queryFn: adminListInventory,
+  });
+
+  const upsert = useMutation({
+    mutationFn: adminUpsertInventory,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "inventory"] }),
+    onError: (e: Error) => toast.error(e.message ?? "Save failed"),
+  });
 
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<InventoryStatus | "all">("all");
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>("all");
   const [logUnit, setLogUnit] = useState<{ unitId: string; productName: string; unitLabel: string } | null>(null);
-  const logEvents = useMemo(
-    () => (logUnit ? events.filter((e) => e.unitId === logUnit.unitId) : []),
-    [events, logUnit],
-  );
+
+  // Local unsaved edits — flush on blur to avoid a network round-trip per keystroke.
+  const [pending, setPending] = useState<Record<string, { onHand?: number; reserved?: number }>>({});
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -61,47 +84,91 @@ function InventoryAdmin() {
       .filter((p) => !q || p.name.toLowerCase().includes(q) || p.slug.includes(q))
       .flatMap((p) =>
         p.units.map((u) => {
-          const rec = records[u.id] ?? { available: 0, reserved: 0, updatedAt: new Date().toISOString() };
-          const status = deriveStatus(rec);
-          return { product: p, unit: u, rec, status };
+          const rec = inventory[u.id];
+          return { product: p, unit: u, rec };
         }),
       )
-      .filter((row) => statusFilter === "all" || row.status === statusFilter);
-  }, [records, query, categoryId, statusFilter]);
+      .filter(({ unit }) =>
+        availabilityFilter === "all" || unit.availability === availabilityFilter,
+      );
+  }, [products, inventory, query, categoryId, availabilityFilter]);
 
   const totals = useMemo(() => {
-    const all = Object.entries(records).map(([, r]) => ({ r, s: deriveStatus(r) }));
+    const rowsAll = products.flatMap((p) => p.units.map((u) => ({ u, rec: inventory[u.id] })));
+    const onHand = rowsAll.reduce((s, x) => s + (x.rec?.onHand ?? 0), 0);
+    const reserved = rowsAll.reduce((s, x) => s + (x.rec?.reserved ?? 0), 0);
     return {
-      units: all.length,
-      available: all.filter((x) => x.s === "available").length,
-      low: all.filter((x) => x.s === "low_stock").length,
-      out: all.filter((x) => x.s === "out_of_stock").length,
-      seasonal: all.filter((x) => x.s === "seasonal").length,
-      onHand: all.reduce((sum, x) => sum + remainingOf(x.r), 0),
-      reserved: all.reduce((sum, x) => sum + x.r.reserved, 0),
+      units: rowsAll.length,
+      onHand,
+      reserved,
+      available: rowsAll.filter((x) => x.u.availability === "available").length,
+      low: rowsAll.filter((x) => x.u.availability === "low_stock").length,
+      out: rowsAll.filter((x) => x.u.availability === "out_of_stock").length,
     };
-  }, [records]);
+  }, [products, inventory]);
+
+  const effective = (unitId: string, key: "onHand" | "reserved", rec?: InventoryRow) => {
+    const p = pending[unitId]?.[key];
+    if (p !== undefined) return p;
+    return rec?.[key] ?? 0;
+  };
+
+  const stagePending = (unitId: string, key: "onHand" | "reserved", value: number) => {
+    setPending((s) => ({ ...s, [unitId]: { ...s[unitId], [key]: value } }));
+  };
+
+  const flush = (unitId: string) => {
+    const patch = pending[unitId];
+    if (!patch) return;
+    const current = inventory[unitId];
+    const next = {
+      productUnitId: unitId,
+      onHand: patch.onHand ?? current?.onHand ?? 0,
+      reserved: patch.reserved ?? current?.reserved ?? 0,
+    };
+    // Client-side guard so we don't fire an obviously-invalid request that
+    // will just get rejected by the reserved<=onHand check constraint.
+    if (next.reserved > next.onHand) {
+      toast.error("Reserved cannot exceed on-hand");
+      setPending((s) => {
+        const { [unitId]: _, ...rest } = s;
+        return rest;
+      });
+      return;
+    }
+    upsert.mutate(next, {
+      onSuccess: () =>
+        setPending((s) => {
+          const { [unitId]: _, ...rest } = s;
+          return rest;
+        }),
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background text-ink">
-      {/* Admin trust-zone header, full-width (not the mobile shell) */}
       <header className="sticky top-0 z-30 border-b border-trust-deep/40 bg-trust-deep text-trust-deep-foreground">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-6 py-3.5">
-          <Link to="/" className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/10" aria-label="Back to marketplace">
+          <Link to="/admin" className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/10" aria-label="Back to admin">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">Tradly Admin</p>
             <h1 className="text-[15px] font-semibold">Inventory</h1>
           </div>
-          <div className="ml-auto hidden items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-medium md:flex">
+          <nav className="ml-auto hidden gap-1 text-[13px] font-medium md:flex">
+            <Link to="/admin/catalog" className="rounded-full px-3 py-1.5 opacity-80 hover:bg-white/10">Catalog</Link>
+            <Link to="/admin/categories" className="rounded-full px-3 py-1.5 opacity-80 hover:bg-white/10">Categories</Link>
+            <Link to="/admin/inventory" className="rounded-full bg-white/15 px-3 py-1.5">Inventory</Link>
+            <Link to="/admin/orders" className="rounded-full px-3 py-1.5 opacity-80 hover:bg-white/10">Orders</Link>
+          </nav>
+          <div className="ml-3 hidden items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-[12px] font-medium lg:flex">
             <ShieldCheck className="h-3.5 w-3.5" /> Sole supplier · Tradly Fresh Produce
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-6 md:px-6">
-        {/* Summary tiles */}
         <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Tile label="SKUs tracked" value={totals.units.toString()} />
           <Tile label="Units on hand" value={totals.onHand.toLocaleString("en-KE")} accent="farm" />
@@ -110,13 +177,11 @@ function InventoryAdmin() {
           <Tile label="Out of stock" value={totals.out.toString()} accent="danger" />
         </section>
 
-        {/* Controls */}
         <section className="mt-6 flex flex-wrap items-center gap-3">
           <label className="relative flex min-w-64 flex-1 items-center">
             <Search className="pointer-events-none absolute left-3.5 h-4 w-4 text-ink-muted" />
             <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              value={query} onChange={(e) => setQuery(e.target.value)}
               placeholder="Search product or SKU…"
               className="w-full rounded-full border border-divider bg-surface py-2.5 pl-10 pr-4 text-[13px] focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20"
             />
@@ -130,18 +195,19 @@ function InventoryAdmin() {
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            value={availabilityFilter}
+            onChange={(e) => setAvailabilityFilter(e.target.value as AvailabilityFilter)}
             className="rounded-full border border-divider bg-surface px-3 py-2.5 text-[13px] font-medium text-ink focus:border-trust focus:outline-none"
           >
             <option value="all">All statuses</option>
-            {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            <option value="available">Available</option>
+            <option value="low_stock">Low stock</option>
+            <option value="out_of_stock">Out of stock</option>
+            <option value="seasonal">Seasonal</option>
           </select>
         </section>
 
-        {/* Table (desktop) / card list (mobile) */}
         <section className="mt-5 overflow-hidden rounded-2xl border border-divider bg-surface">
-          {/* Desktop table */}
           <div className="hidden md:block">
             <table className="w-full text-left text-[13px]">
               <thead className="border-b border-divider bg-background/60 text-[11px] uppercase tracking-wide text-ink-muted">
@@ -149,23 +215,25 @@ function InventoryAdmin() {
                   <th className="px-5 py-3 font-semibold">Product</th>
                   <th className="px-3 py-3 font-semibold">Unit</th>
                   <th className="px-3 py-3 text-right font-semibold">Price</th>
-                  <th className="w-32 px-3 py-3 text-right font-semibold">Available</th>
+                  <th className="w-32 px-3 py-3 text-right font-semibold">On hand</th>
                   <th className="w-32 px-3 py-3 text-right font-semibold">Reserved</th>
                   <th className="w-24 px-3 py-3 text-right font-semibold">Remaining</th>
-                  <th className="w-44 px-3 py-3 font-semibold">Status</th>
+                  <th className="w-44 px-3 py-3 font-semibold">Availability</th>
                   <th className="w-10 px-3 py-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ product, unit, rec, status }) => {
-                  const remaining = remainingOf(rec);
-                  const pinned = Boolean(rec.statusOverride);
+                {rows.map(({ product, unit, rec }) => {
+                  const onHand = effective(unit.id, "onHand", rec);
+                  const reserved = effective(unit.id, "reserved", rec);
+                  const remaining = Math.max(0, onHand - reserved);
+                  const meta = AVAILABILITY_META[unit.availability];
                   return (
                     <tr key={unit.id} className="border-b border-divider last:border-b-0 hover:bg-background/40">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted">
-                            <img src={product.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                            {product.thumbnailUrl && <img src={product.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
                           </div>
                           <div className="min-w-0">
                             <p className="truncate font-semibold text-ink">{product.name}</p>
@@ -176,87 +244,86 @@ function InventoryAdmin() {
                       <td className="px-3 py-3 text-ink-muted">{unit.unitLabel}</td>
                       <td className="px-3 py-3 text-right font-medium tabular-nums text-ink">{formatKes(unit.priceKes)}</td>
                       <td className="px-3 py-3 text-right">
-                        <NumberInput value={rec.available} onChange={(v) => setAvailable(unit.id, v)} />
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <NumberInput value={rec.reserved} onChange={(v) => setReserved(unit.id, v)} tone="trust" />
-                      </td>
-                      <td className="px-3 py-3 text-right font-bold tabular-nums text-farm">{remaining.toLocaleString("en-KE")}</td>
-                      <td className="px-3 py-3">
-                        <StatusToggle
-                          status={status}
-                          pinned={pinned}
-                          onChange={(next, pin) => {
-                            setStatus(unit.id, pin ? next : null);
-                            toast.success(`${product.name} · ${unit.unitLabel} → ${labelOf(next)}${pin ? " (locked)" : ""}`, { duration: 1600 });
-                          }}
+                        <NumberInput
+                          value={onHand}
+                          onChange={(v) => stagePending(unit.id, "onHand", v)}
+                          onBlur={() => flush(unit.id)}
                         />
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setLogUnit({ unitId: unit.id, productName: product.name, unitLabel: unit.unitLabel })}
-                            className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"
-                            aria-label="View reservation history"
-                            title="Reservation history"
-                          >
-                            <History className="h-3.5 w-3.5" />
-                          </button>
-                          {pinned && (
-                            <button
-                              type="button"
-                              onClick={() => { setStatus(unit.id, null); toast.success("Status now auto-derived"); }}
-                              className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"
-                              aria-label="Reset to auto"
-                              title="Reset to auto-derived status"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        <NumberInput
+                          value={reserved}
+                          tone="trust"
+                          onChange={(v) => stagePending(unit.id, "reserved", v)}
+                          onBlur={() => flush(unit.id)}
+                        />
+                      </td>
+                      <td className="px-3 py-3 text-right font-bold tabular-nums text-farm">{remaining.toLocaleString("en-KE")}</td>
+                      <td className="px-3 py-3">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${meta.tone}`}>
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          {meta.label}
+                        </span>
+                        <p className="mt-1 flex items-center gap-1 text-[10px] text-ink-muted">
+                          <SlidersHorizontal className="h-3 w-3" /> Edit in Catalog
+                        </p>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setLogUnit({ unitId: unit.id, productName: product.name, unitLabel: unit.unitLabel })}
+                          className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"
+                          aria-label="View movement history"
+                          title="Movement history"
+                        >
+                          <History className="h-3.5 w-3.5" />
+                        </button>
                       </td>
                     </tr>
                   );
                 })}
-                {rows.length === 0 && (
+                {!invLoading && rows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-5 py-16 text-center text-sm text-ink-muted">
-                      No SKUs match these filters.
+                      {products.length === 0
+                        ? "No products yet — create a product to start tracking stock."
+                        : "No SKUs match these filters."}
                     </td>
                   </tr>
+                )}
+                {invLoading && (
+                  <tr><td colSpan={8} className="px-5 py-16 text-center text-sm text-ink-muted">Loading…</td></tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Mobile card list */}
           <ul className="divide-y divide-divider md:hidden">
-            {rows.map(({ product, unit, rec, status }) => {
-              const remaining = remainingOf(rec);
-              const pinned = Boolean(rec.statusOverride);
+            {rows.map(({ product, unit, rec }) => {
+              const onHand = effective(unit.id, "onHand", rec);
+              const reserved = effective(unit.id, "reserved", rec);
+              const remaining = Math.max(0, onHand - reserved);
+              const meta = AVAILABILITY_META[unit.availability];
               return (
                 <li key={unit.id} className="p-4">
                   <div className="flex items-center gap-3">
                     <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-muted">
-                      <img src={product.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                      {product.thumbnailUrl && <img src={product.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[14px] font-semibold text-ink">{product.name}</p>
                       <p className="text-[11px] text-ink-muted">{unit.unitLabel} · {formatKes(unit.priceKes)}</p>
                     </div>
-                    <StatusToggle
-                      status={status} pinned={pinned}
-                      onChange={(next, pin) => setStatus(unit.id, pin ? next : null)}
-                      compact
-                    />
+                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.tone}`}>
+                      {meta.label}
+                    </span>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-[12px]">
-                    <MobileField label="Available">
-                      <NumberInput value={rec.available} onChange={(v) => setAvailable(unit.id, v)} full />
+                    <MobileField label="On hand">
+                      <NumberInput full value={onHand} onChange={(v) => stagePending(unit.id, "onHand", v)} onBlur={() => flush(unit.id)} />
                     </MobileField>
                     <MobileField label="Reserved">
-                      <NumberInput value={rec.reserved} onChange={(v) => setReserved(unit.id, v)} tone="trust" full />
+                      <NumberInput full tone="trust" value={reserved} onChange={(v) => stagePending(unit.id, "reserved", v)} onBlur={() => flush(unit.id)} />
                     </MobileField>
                     <MobileField label="Remaining">
                       <span className="block rounded-lg bg-farm/10 px-2 py-2 text-center font-bold tabular-nums text-farm">
@@ -269,27 +336,27 @@ function InventoryAdmin() {
                     onClick={() => setLogUnit({ unitId: unit.id, productName: product.name, unitLabel: unit.unitLabel })}
                     className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-trust"
                   >
-                    <History className="h-3.5 w-3.5" /> Reservation history
+                    <History className="h-3.5 w-3.5" /> Movement history
                   </button>
                 </li>
               );
             })}
-            {rows.length === 0 && (
-              <li className="p-10 text-center text-sm text-ink-muted">No SKUs match these filters.</li>
+            {!invLoading && rows.length === 0 && (
+              <li className="p-10 text-center text-sm text-ink-muted">No SKUs match.</li>
             )}
           </ul>
         </section>
 
         <p className="mt-4 flex items-center gap-2 text-[11px] text-ink-muted">
           <Package className="h-3.5 w-3.5" />
-          Remaining = Available − Reserved. Status auto-derives (Out of stock at 0, Low stock at ≤ 25) unless pinned.
+          Remaining = On-hand − Reserved. Availability is set on each unit in the Catalog editor.
         </p>
       </main>
 
       {logUnit && (
-        <AuditLogModal
+        <MovementLogModal
           title={`${logUnit.productName} · ${logUnit.unitLabel}`}
-          events={logEvents}
+          unitId={logUnit.unitId}
           onClose={() => setLogUnit(null)}
         />
       )}
@@ -297,15 +364,19 @@ function InventoryAdmin() {
   );
 }
 
-function AuditLogModal({
-  title, events, onClose,
-}: { title: string; events: InventoryEvent[]; onClose: () => void }) {
+function MovementLogModal({
+  title, unitId, onClose,
+}: { title: string; unitId: string; onClose: () => void }) {
+  const { data: events = [], isLoading } = useQuery({
+    queryKey: ["admin", "movements", unitId],
+    queryFn: () => adminListMovements(unitId),
+  });
   return (
     <div className="fixed inset-0 z-50 flex bg-black/50" onClick={onClose}>
       <div className="ml-auto flex h-full w-full max-w-md flex-col bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <header className="flex items-center justify-between border-b border-divider bg-surface px-6 py-4">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Reservation history</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Movement history</p>
             <h2 className="truncate text-[16px] font-semibold text-ink">{title}</h2>
           </div>
           <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-muted" aria-label="Close">
@@ -313,14 +384,16 @@ function AuditLogModal({
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {events.length === 0 ? (
+          {isLoading ? (
+            <p className="py-10 text-center text-[13px] text-ink-muted">Loading…</p>
+          ) : events.length === 0 ? (
             <p className="py-10 text-center text-[13px] text-ink-muted">
-              No reservation events yet. Events log when a PO is generated, a GRN is posted, or an order is cancelled.
+              No movements yet. Events log when stock is adjusted, reserved (PO), released (cancel), or fulfilled (GRN).
             </p>
           ) : (
             <ol className="space-y-3">
-              {events.map((e) => {
-                const meta = KIND_META[e.kind];
+              {events.map((e: InventoryMovementRow) => {
+                const meta = MOVEMENT_META[e.movementType];
                 const Icon = meta.icon;
                 return (
                   <li key={e.id} className="flex gap-3 rounded-xl border border-divider bg-surface p-3">
@@ -332,11 +405,11 @@ function AuditLogModal({
                         <p className="text-[13px] font-semibold text-ink">
                           {meta.label}
                           <span className={`ml-2 font-bold tabular-nums ${meta.qtyTone}`}>
-                            {meta.sign}{e.qty}
+                            {meta.sign}{Math.abs(e.quantity)}
                           </span>
                         </p>
                         <span className="shrink-0 text-[11px] text-ink-muted">
-                          {format(new Date(e.timestamp), "d MMM, HH:mm")}
+                          {format(new Date(e.createdAt), "d MMM, HH:mm")}
                         </span>
                       </div>
                       <p className="mt-0.5 text-[12px] text-ink-muted">
@@ -355,13 +428,12 @@ function AuditLogModal({
   );
 }
 
-const KIND_META = {
-  reserve: { label: "Reserved", sign: "+", tone: "bg-trust/12 text-trust-deep", qtyTone: "text-trust-deep", icon: ArrowUpRight },
-  release: { label: "Released", sign: "−", tone: "bg-muted text-ink",           qtyTone: "text-ink",        icon: ArrowDownRight },
-  fulfill: { label: "Fulfilled (GRN)", sign: "−", tone: "bg-farm/15 text-farm", qtyTone: "text-farm",       icon: CheckCircle2 },
+const MOVEMENT_META = {
+  adjust:  { label: "Adjusted",         sign: "±", tone: "bg-muted text-ink",          qtyTone: "text-ink",        icon: SlidersHorizontal },
+  reserve: { label: "Reserved",         sign: "+", tone: "bg-trust/12 text-trust-deep", qtyTone: "text-trust-deep", icon: ArrowUpRight },
+  release: { label: "Released",         sign: "−", tone: "bg-muted text-ink",           qtyTone: "text-ink",        icon: ArrowDownRight },
+  fulfill: { label: "Fulfilled (GRN)",  sign: "−", tone: "bg-farm/15 text-farm",        qtyTone: "text-farm",       icon: CheckCircle2 },
 } as const;
-
-/* ---------- helpers ---------- */
 
 function Tile({ label, value, accent }: { label: string; value: string; accent?: "farm" | "trust" | "ripe" | "danger" }) {
   const tone =
@@ -378,8 +450,14 @@ function Tile({ label, value, accent }: { label: string; value: string; accent?:
 }
 
 function NumberInput({
-  value, onChange, tone = "ink", full = false,
-}: { value: number; onChange: (v: number) => void; tone?: "ink" | "trust"; full?: boolean }) {
+  value, onChange, onBlur, tone = "ink", full = false,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  onBlur?: () => void;
+  tone?: "ink" | "trust";
+  full?: boolean;
+}) {
   const color = tone === "trust" ? "text-trust" : "text-ink";
   return (
     <input
@@ -387,7 +465,8 @@ function NumberInput({
       inputMode="numeric"
       min={0}
       value={value}
-      onChange={(e) => onChange(Number.parseInt(e.target.value || "0", 10))}
+      onChange={(e) => onChange(Number.parseFloat(e.target.value || "0") || 0)}
+      onBlur={onBlur}
       className={`${full ? "w-full" : "w-24"} rounded-lg border border-divider bg-background px-2.5 py-1.5 text-right text-[13px] font-semibold tabular-nums ${color} focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20`}
     />
   );
@@ -399,49 +478,5 @@ function MobileField({ label, children }: { label: string; children: React.React
       <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-ink-muted">{label}</span>
       {children}
     </label>
-  );
-}
-
-function StatusToggle({
-  status, pinned, onChange, compact = false,
-}: {
-  status: InventoryStatus;
-  pinned: boolean;
-  onChange: (next: InventoryStatus, pin: boolean) => void;
-  compact?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
-        className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${toneOf(status)} ${compact ? "" : "min-w-32 justify-between"}`}
-      >
-        <span className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-          {labelOf(status)}
-        </span>
-        {pinned && <span className="text-[9px] font-bold uppercase tracking-wide opacity-70">Pinned</span>}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-divider bg-surface p-1 shadow-lg">
-          {STATUSES.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); onChange(s.value, true); setOpen(false); }}
-              className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] font-medium hover:bg-background ${
-                s.value === status ? "text-ink" : "text-ink-muted"
-              }`}
-            >
-              <span className={`h-2 w-2 rounded-full ${s.tone.split(" ")[0]}`} />
-              {s.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
-import { getSavedList } from "../marketplace/api/mockMarketplaceApi";
+import { getSavedList } from "../marketplace/api/marketplaceApi";
 import { useCartStore } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
 import { toast } from "sonner";

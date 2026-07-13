@@ -1,69 +1,187 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, Save, X, CalendarClock, Package } from "lucide-react";
-import { useCatalogStore, getEffectiveCatalog, effectivePriceFor } from "../marketplace/store/catalogStore";
+import {
+  ArrowLeft, Plus, Trash2, Save, X, CalendarClock, Package, Upload,
+} from "lucide-react";
+import {
+  adminListProducts,
+  adminListCategories,
+  adminListSchedules,
+  adminUpsertProduct,
+  adminDeleteProduct,
+  adminReplaceUnits,
+  adminAddSchedule,
+  adminRemoveSchedule,
+  adminUploadImage,
+  type AdminProduct,
+  type UnitInput,
+} from "../marketplace/api/adminCatalog";
+import { RequireAdmin } from "@/components/RequireAdmin";
 import { formatKes } from "../marketplace/lib/format";
-import type { MarketplaceProduct, MarketplaceProductUnit, ScheduledPrice } from "../marketplace/types/marketplace";
+import type {
+  MarketplaceCategory,
+  MarketplaceProductUnit,
+  ScheduledPrice,
+} from "../marketplace/types/marketplace";
 
 export const Route = createFileRoute("/admin/catalog")({
   head: () => ({ meta: [{ title: "Catalog — Tradly Admin" }, { name: "robots", content: "noindex" }] }),
-  component: CatalogAdmin,
+  component: () => (
+    <RequireAdmin>
+      <CatalogAdmin />
+    </RequireAdmin>
+  ),
 });
 
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-const emptyUnit = (): MarketplaceProductUnit => ({
-  id: `u-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-  unitLabel: "1 KG",
-  unitQty: 1,
-  isDefault: true,
-  priceKes: 0,
-  availability: "available",
-});
-
-function blank(categoryId: string): MarketplaceProduct {
+/** New units get a client-generated placeholder id; adminReplaceUnits uses
+ * upsert so rows with a fresh UUID land as inserts. */
+function newUnitDraft(overrides: Partial<MarketplaceProductUnit> = {}): MarketplaceProductUnit {
   return {
-    id: `cp-${Date.now()}`,
+    id: crypto.randomUUID(),
+    unitLabel: "1 KG",
+    unitQty: 1,
+    isDefault: true,
+    priceKes: 0,
+    availability: "available",
+    ...overrides,
+  };
+}
+
+function blankDraft(categoryId: string): AdminProduct {
+  return {
+    id: crypto.randomUUID(),
     categoryId,
     name: "",
     slug: "",
     description: "",
-    origin: "",
+    origin: undefined,
     thumbnailUrl: "",
     galleryUrls: [],
-    units: [emptyUnit()],
+    units: [newUnitDraft()],
     isFeatured: false,
     keywords: [],
+    published: false,
   };
 }
 
-function CatalogAdmin() {
-  const version = useCatalogStore((s) => s.version);
-  const upsertProduct = useCatalogStore((s) => s.upsertProduct);
-  const deleteProduct = useCatalogStore((s) => s.deleteProduct);
-  const scheduledPrices = useCatalogStore((s) => s.scheduledPrices);
-  const schedulePrice = useCatalogStore((s) => s.schedulePrice);
-  const removeScheduledPrice = useCatalogStore((s) => s.removeScheduledPrice);
+/** effectivePriceFor mirrors the SQL function marketplace_effective_price. */
+function effectivePriceFor(
+  unitId: string,
+  basePriceKes: number,
+  schedules: ScheduledPrice[],
+  onDate: string,
+): number {
+  const applicable = schedules
+    .filter((s) => s.productUnitId === unitId && s.effectiveFrom <= onDate)
+    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
+  return applicable[0]?.priceKes ?? basePriceKes;
+}
 
-  const { products, categories } = useMemo(() => getEffectiveCatalog(), [version]);
-  const [editing, setEditing] = useState<MarketplaceProduct | null>(null);
+function CatalogAdmin() {
+  const qc = useQueryClient();
+
+  const { data: products = [], isLoading: productsLoading } = useQuery({
+    queryKey: ["admin", "products"],
+    queryFn: adminListProducts,
+  });
+  const { data: categories = [] } = useQuery({
+    queryKey: ["admin", "categories"],
+    queryFn: adminListCategories,
+  });
+  const { data: schedules = [] } = useQuery({
+    queryKey: ["admin", "schedules"],
+    queryFn: adminListSchedules,
+  });
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ["admin", "products"] });
+    qc.invalidateQueries({ queryKey: ["admin", "schedules"] });
+    qc.invalidateQueries({ queryKey: ["products"] });
+  };
+
+  const [editing, setEditing] = useState<AdminProduct | null>(null);
   const [query, setQuery] = useState("");
 
-  const filtered = products.filter((p) =>
-    !query.trim() || p.name.toLowerCase().includes(query.toLowerCase()),
-  );
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return products.filter((p) => !q || p.name.toLowerCase().includes(q) || p.slug.includes(q));
+  }, [products, query]);
 
-  const openNew = () => setEditing(blank(categories[0]?.id ?? "c1"));
+  const openNew = () => setEditing(blankDraft(categories[0]?.id ?? ""));
+
+  const saveProduct = useMutation({
+    mutationFn: async (p: AdminProduct) => {
+      const slug = p.slug || slugify(p.name);
+      const productId = await adminUpsertProduct({
+        id: p.id,
+        categoryId: p.categoryId,
+        name: p.name,
+        slug,
+        description: p.description,
+        origin: p.origin ?? null,
+        thumbnailUrl: p.thumbnailUrl || p.galleryUrls[0] || null,
+        galleryUrls: p.galleryUrls,
+        keywords: p.keywords ?? [],
+        isFeatured: p.isFeatured,
+        published: p.published,
+      });
+      const unitPayload: UnitInput[] = p.units.map((u, i) => ({
+        id: u.id,
+        productId,
+        unitLabel: u.unitLabel,
+        unitQty: u.unitQty,
+        isDefault: u.isDefault,
+        priceKes: u.priceKes,
+        availability: u.availability,
+        displayOrder: i,
+      }));
+      await adminReplaceUnits(productId, unitPayload);
+    },
+    onSuccess: () => {
+      invalidateAll();
+      toast.success("Saved");
+      setEditing(null);
+    },
+    onError: (e: Error) => toast.error(e.message ?? "Save failed"),
+  });
+
+  const deleteProduct = useMutation({
+    mutationFn: adminDeleteProduct,
+    onSuccess: () => {
+      invalidateAll();
+      toast.success("Deleted");
+    },
+    onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
+  });
+
+  const addSchedule = useMutation({
+    mutationFn: adminAddSchedule,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "schedules"] });
+      toast.success("Price scheduled");
+    },
+    onError: (e: Error) => toast.error(e.message ?? "Could not schedule"),
+  });
+
+  const removeSchedule = useMutation({
+    mutationFn: adminRemoveSchedule,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "schedules"] }),
+    onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
+  });
 
   const save = () => {
     if (!editing) return;
     if (!editing.name.trim()) return toast.error("Name required");
-    const slug = editing.slug || slugify(editing.name);
-    upsertProduct({ ...editing, slug, thumbnailUrl: editing.thumbnailUrl || editing.galleryUrls[0] || "" });
-    toast.success("Saved");
-    setEditing(null);
+    if (!editing.categoryId) return toast.error("Category required");
+    if (editing.units.length === 0) return toast.error("At least one unit required");
+    if (!editing.units.some((u) => u.isDefault))
+      return toast.error("One unit must be the default");
+    saveProduct.mutate(editing);
   };
 
   return (
@@ -95,7 +213,9 @@ function CatalogAdmin() {
           />
           <button
             onClick={openNew}
-            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2.5 text-[13px] font-semibold text-background hover:bg-ink/90"
+            disabled={categories.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2.5 text-[13px] font-semibold text-background hover:bg-ink/90 disabled:opacity-50"
+            title={categories.length === 0 ? "Create a category first" : undefined}
           >
             <Plus className="h-4 w-4" /> New product
           </button>
@@ -109,6 +229,7 @@ function CatalogAdmin() {
                 <th className="px-3 py-3 font-semibold">Category</th>
                 <th className="px-3 py-3 font-semibold">Units</th>
                 <th className="px-3 py-3 text-right font-semibold">Default price</th>
+                <th className="px-3 py-3 font-semibold">Status</th>
                 <th className="w-32 px-3 py-3"></th>
               </tr>
             </thead>
@@ -128,9 +249,17 @@ function CatalogAdmin() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-ink-muted">{categories.find((c) => c.id === p.categoryId)?.name}</td>
+                    <td className="px-3 py-3 text-ink-muted">{categories.find((c) => c.id === p.categoryId)?.name ?? "—"}</td>
                     <td className="px-3 py-3 text-ink-muted">{p.units.length}</td>
-                    <td className="px-3 py-3 text-right font-medium tabular-nums text-ink">{formatKes(def.priceKes)}</td>
+                    <td className="px-3 py-3 text-right font-medium tabular-nums text-ink">{def ? formatKes(def.priceKes) : "—"}</td>
+                    <td className="px-3 py-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                        p.published ? "bg-farm/12 text-farm" : "bg-muted text-ink-muted"
+                      }`}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {p.published ? "Published" : "Draft"}
+                      </span>
+                    </td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-1">
                         <button
@@ -140,7 +269,7 @@ function CatalogAdmin() {
                           Edit
                         </button>
                         <button
-                          onClick={() => { if (confirm(`Delete ${p.name}?`)) { deleteProduct(p.id); toast.success("Deleted"); } }}
+                          onClick={() => { if (confirm(`Delete ${p.name}?`)) deleteProduct.mutate(p.id); }}
                           className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-destructive/10 hover:text-destructive"
                           aria-label="Delete"
                         >
@@ -151,15 +280,20 @@ function CatalogAdmin() {
                   </tr>
                 );
               })}
-              {filtered.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-14 text-center text-ink-muted">No products match.</td></tr>
+              {!productsLoading && filtered.length === 0 && (
+                <tr><td colSpan={6} className="px-5 py-14 text-center text-ink-muted">
+                  {products.length === 0 ? "No products yet — create the first one." : "No products match."}
+                </td></tr>
+              )}
+              {productsLoading && (
+                <tr><td colSpan={6} className="px-5 py-14 text-center text-ink-muted">Loading…</td></tr>
               )}
             </tbody>
           </table>
         </section>
 
         <p className="mt-3 flex items-center gap-1.5 text-[11px] text-ink-muted">
-          <Package className="h-3.5 w-3.5" /> Edits are stored client-side for this demo.
+          <Package className="h-3.5 w-3.5" /> Only published products appear on market.tradly.co.ke.
         </p>
       </main>
 
@@ -167,12 +301,13 @@ function CatalogAdmin() {
         <ProductEditor
           value={editing}
           categories={categories}
-          scheduledPrices={scheduledPrices}
+          scheduledPrices={schedules}
           onChange={setEditing}
           onSave={save}
           onClose={() => setEditing(null)}
-          onSchedule={(entry) => { schedulePrice(entry); toast.success("Price scheduled"); }}
-          onRemoveSchedule={(id) => removeScheduledPrice(id)}
+          onSchedule={(entry) => addSchedule.mutate(entry)}
+          onRemoveSchedule={(id) => removeSchedule.mutate(id)}
+          saving={saveProduct.isPending}
         />
       )}
     </div>
@@ -181,24 +316,27 @@ function CatalogAdmin() {
 
 function ProductEditor({
   value, categories, scheduledPrices,
-  onChange, onSave, onClose, onSchedule, onRemoveSchedule,
+  onChange, onSave, onClose, onSchedule, onRemoveSchedule, saving,
 }: {
-  value: MarketplaceProduct;
-  categories: { id: string; name: string }[];
+  value: AdminProduct;
+  categories: MarketplaceCategory[];
   scheduledPrices: ScheduledPrice[];
-  onChange: (p: MarketplaceProduct) => void;
+  onChange: (p: AdminProduct) => void;
   onSave: () => void;
   onClose: () => void;
-  onSchedule: (entry: Omit<ScheduledPrice, "id">) => void;
+  onSchedule: (entry: { productUnitId: string; priceKes: number; effectiveFrom: string }) => void;
   onRemoveSchedule: (id: string) => void;
+  saving: boolean;
 }) {
   const [gallery, setGallery] = useState<string>("");
   const [schedUnit, setSchedUnit] = useState(value.units[0]?.id ?? "");
   const [schedPrice, setSchedPrice] = useState<number>(value.units[0]?.priceKes ?? 0);
   const [schedFrom, setSchedFrom] = useState(new Date().toISOString().slice(0, 10));
   const [previewDate, setPreviewDate] = useState(new Date().toISOString().slice(0, 10));
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const set = (patch: Partial<MarketplaceProduct>) => onChange({ ...value, ...patch });
+  const set = (patch: Partial<AdminProduct>) => onChange({ ...value, ...patch });
   const setUnit = (id: string, patch: Partial<MarketplaceProductUnit>) =>
     onChange({ ...value, units: value.units.map((u) => (u.id === id ? { ...u, ...patch } : u)) });
 
@@ -209,10 +347,32 @@ function ProductEditor({
     setGallery("");
   };
 
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const slug = value.slug || slugify(value.name || "unfiled");
+      const url = await adminUploadImage(file, slug);
+      const list = [...value.galleryUrls, url];
+      onChange({ ...value, galleryUrls: list, thumbnailUrl: value.thumbnailUrl || url });
+      toast.success("Image uploaded");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      toast.error(msg);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
   const schedulesForUnit = (unitId: string) =>
     scheduledPrices
       .filter((s) => s.productUnitId === unitId)
       .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+
+  const setDefaultUnit = (id: string) =>
+    onChange({ ...value, units: value.units.map((x) => ({ ...x, isDefault: x.id === id })) });
 
   return (
     <div className="fixed inset-0 z-50 flex bg-black/50" onClick={onClose}>
@@ -223,13 +383,17 @@ function ProductEditor({
         <header className="flex items-center justify-between border-b border-divider bg-surface px-6 py-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-              {value.id.startsWith("cp-") ? "New product" : "Edit product"}
+              Edit product
             </p>
             <h2 className="text-[17px] font-semibold text-ink">{value.name || "Untitled"}</h2>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onSave} className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-background hover:bg-ink/90">
-              <Save className="h-3.5 w-3.5" /> Save
+            <button
+              onClick={onSave}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-background hover:bg-ink/90 disabled:opacity-60"
+            >
+              <Save className="h-3.5 w-3.5" /> {saving ? "Saving…" : "Save"}
             </button>
             <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-muted"><X className="h-5 w-5" /></button>
           </div>
@@ -244,17 +408,24 @@ function ProductEditor({
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </Field>
-            <Field label="Origin"><input value={value.origin ?? ""} onChange={(e) => set({ origin: e.target.value })} className={inputCls} /></Field>
+            <Field label="Origin"><input value={value.origin ?? ""} onChange={(e) => set({ origin: e.target.value || undefined })} className={inputCls} /></Field>
           </div>
 
           <Field label="Description">
             <textarea value={value.description} onChange={(e) => set({ description: e.target.value })} rows={3} className={inputCls} />
           </Field>
 
-          <label className="flex items-center gap-2 text-[13px] text-ink">
-            <input type="checkbox" checked={value.isFeatured} onChange={(e) => set({ isFeatured: e.target.checked })} />
-            Feature on home
-          </label>
+          <div className="flex items-center gap-6 text-[13px] text-ink">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={value.isFeatured} onChange={(e) => set({ isFeatured: e.target.checked })} />
+              Feature on home
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={value.published} onChange={(e) => set({ published: e.target.checked })} />
+              <span className="font-semibold">Published</span>
+              <span className="text-ink-muted">(visible on the storefront)</span>
+            </label>
+          </div>
 
           {/* Images */}
           <section>
@@ -275,11 +446,29 @@ function ProductEditor({
                 </div>
               ))}
             </div>
-            <div className="mt-2 flex gap-2">
-              <input value={gallery} onChange={(e) => setGallery(e.target.value)} placeholder="Paste image URL" className={inputCls} />
-              <button onClick={addGalleryImage} className="rounded-full bg-ink px-4 py-2 text-[12px] font-semibold text-background">Add</button>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              <input value={gallery} onChange={(e) => setGallery(e.target.value)} placeholder="Paste image URL" className={inputCls + " flex-1 min-w-52"} />
+              <button onClick={addGalleryImage} className="rounded-full bg-ink px-4 py-2 text-[12px] font-semibold text-background">Add URL</button>
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                className="inline-flex items-center gap-1.5 rounded-full border border-divider bg-surface px-4 py-2 text-[12px] font-semibold text-ink disabled:opacity-60"
+              >
+                <Upload className="h-3.5 w-3.5" /> {uploading ? "Uploading…" : "Upload file"}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFile}
+                className="hidden"
+              />
             </div>
-            <p className="mt-1 text-[11px] text-ink-muted">First image is the main thumbnail. Add several for the gallery.</p>
+            <p className="mt-1 text-[11px] text-ink-muted">
+              First image is the main thumbnail. Uploads go to the marketplace-media bucket.
+            </p>
           </section>
 
           {/* Units */}
@@ -287,7 +476,7 @@ function ProductEditor({
             <div className="mb-2 flex items-center justify-between">
               <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Packaging & pricing</p>
               <button
-                onClick={() => onChange({ ...value, units: [...value.units, emptyUnit()] })}
+                onClick={() => onChange({ ...value, units: [...value.units, newUnitDraft({ isDefault: value.units.length === 0 })] })}
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink hover:underline"
               >
                 <Plus className="h-3 w-3" /> Add unit
@@ -295,12 +484,22 @@ function ProductEditor({
             </div>
             <div className="space-y-2">
               {value.units.map((u) => (
-                <div key={u.id} className="grid grid-cols-[1fr_80px_1fr_auto_auto] items-center gap-2 rounded-xl border border-divider bg-surface p-2.5">
+                <div key={u.id} className="grid grid-cols-[1fr_80px_1fr_130px_auto_auto] items-center gap-2 rounded-xl border border-divider bg-surface p-2.5">
                   <input value={u.unitLabel} onChange={(e) => setUnit(u.id, { unitLabel: e.target.value })} placeholder="Label (e.g. 10 KG Bag)" className={inputCls} />
-                  <input type="number" value={u.unitQty} onChange={(e) => setUnit(u.id, { unitQty: Number(e.target.value) || 0 })} className={inputCls} />
-                  <input type="number" value={u.priceKes} onChange={(e) => setUnit(u.id, { priceKes: Number(e.target.value) || 0 })} placeholder="Price KES" className={inputCls} />
+                  <input type="number" step="0.001" value={u.unitQty} onChange={(e) => setUnit(u.id, { unitQty: Number(e.target.value) || 0 })} className={inputCls} />
+                  <input type="number" step="0.01" value={u.priceKes} onChange={(e) => setUnit(u.id, { priceKes: Number(e.target.value) || 0 })} placeholder="Price KES" className={inputCls} />
+                  <select
+                    value={u.availability}
+                    onChange={(e) => setUnit(u.id, { availability: e.target.value as MarketplaceProductUnit["availability"] })}
+                    className={inputCls}
+                  >
+                    <option value="available">Available</option>
+                    <option value="low_stock">Low stock</option>
+                    <option value="out_of_stock">Out of stock</option>
+                    <option value="seasonal">Seasonal</option>
+                  </select>
                   <label className="flex items-center gap-1 text-[11px] font-medium text-ink-muted">
-                    <input type="radio" name="default-unit" checked={u.isDefault} onChange={() => onChange({ ...value, units: value.units.map((x) => ({ ...x, isDefault: x.id === u.id })) })} />
+                    <input type="radio" name="default-unit" checked={u.isDefault} onChange={() => setDefaultUnit(u.id)} />
                     Default
                   </label>
                   <button
@@ -333,7 +532,10 @@ function ProductEditor({
                   <input type="date" value={schedFrom} onChange={(e) => setSchedFrom(e.target.value)} className={inputCls} />
                 </Field>
                 <button
-                  onClick={() => onSchedule({ productUnitId: schedUnit, priceKes: schedPrice, effectiveFrom: schedFrom })}
+                  onClick={() => {
+                    if (!schedUnit) return toast.error("Save the product first, then schedule");
+                    onSchedule({ productUnitId: schedUnit, priceKes: schedPrice, effectiveFrom: schedFrom });
+                  }}
                   className="rounded-full bg-trust px-4 py-2 text-[12px] font-semibold text-trust-foreground"
                 >
                   Schedule
@@ -389,7 +591,7 @@ function ProductEditor({
                 })}
               </ul>
               <p className="mt-1 text-[11px] text-ink-muted">
-                Shows the price that will apply on the selected day, using the latest schedule effective on or before that date.
+                Preview mirrors the SQL function marketplace_effective_price the storefront uses.
               </p>
             </div>
           </section>

@@ -1,13 +1,14 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
 import { useCartStore, cartSubtotal, cartCount } from "../marketplace/store/cartStore";
 import { useSessionStore, seedProfile } from "../marketplace/store/sessionStore";
-import { submitMarketplaceOrder } from "../marketplace/api/mockMarketplaceApi";
+import { submitMarketplaceOrder } from "../marketplace/api/marketplaceApi";
 import { formatKes } from "../marketplace/lib/format";
 import { ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/checkout")({
   head: () => ({ meta: [{ title: "Checkout — Tradly Market" }, { name: "robots", content: "noindex" }] }),
@@ -18,8 +19,10 @@ function Checkout() {
   const navigate = useNavigate();
   const lines = useCartStore((s) => s.lines);
   const clear = useCartStore((s) => s.clear);
-  const isAuthed = useSessionStore((s) => s.isAuthenticated);
-  const login = useSessionStore((s) => s.login);
+  const { isAuthenticated, isInitializing } = useAuth();
+
+  // Buyer-profile display data still comes from the legacy sessionStore until
+  // Phase 4 wires it to the real businesses / addresses tables.
   const profileState = useSessionStore((s) => s.profile);
   const profile = profileState ?? seedProfile;
 
@@ -30,14 +33,31 @@ function Checkout() {
   });
   const [showSummary, setShowSummary] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  // "gated checkout" — if not authed, show inline signup form
-  const [companyName, setCompanyName] = useState(profile.companyName);
-  const [kraPin, setKraPin] = useState(profile.kraPin);
-  const [phone, setPhone] = useState(profile.phone);
+  // Stable per-cart-render idempotency key: two taps on "Submit" from the
+  // same page load resolve to the same PR instead of double-billing stock.
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   const subtotal = cartSubtotal(lines);
   const count = cartCount(lines);
+
+  // Checkout requires a real buyer session. Anonymous browsers get pushed to
+  // /login with a `next` param so they land back here after signing in.
+  useEffect(() => {
+    if (!isInitializing && !isAuthenticated) {
+      navigate({ to: "/login", search: { next: "/checkout" } });
+    }
+  }, [isInitializing, isAuthenticated, navigate]);
+
+  if (isInitializing || !isAuthenticated) {
+    return (
+      <AppShell>
+        <div className="px-4">
+          <TrustHeader title="Checkout" back="/cart" />
+          <p className="py-16 text-center text-sm text-ink-muted">Checking your session…</p>
+        </div>
+      </AppShell>
+    );
+  }
 
   if (lines.length === 0) {
     return (
@@ -53,15 +73,15 @@ function Checkout() {
   const submit = async () => {
     setSubmitting(true);
     try {
-      if (!isAuthed) {
-        login({ ...seedProfile, companyName, kraPin, phone });
-      }
-      const { id, requestNumber } = await submitMarketplaceOrder(lines, date);
+      const { id, requestNumber } = await submitMarketplaceOrder(lines, date, {
+        idempotencyKey,
+      });
       clear();
       toast.success(`Order ${requestNumber} submitted`);
       navigate({ to: "/order/$id/confirmation", params: { id }, search: { pr: requestNumber } });
     } catch (e) {
-      toast.error("Could not submit. Try again.");
+      const msg = e instanceof Error ? e.message : "Could not submit. Try again.";
+      toast.error(msg);
       console.error(e);
     } finally {
       setSubmitting(false);
@@ -72,20 +92,6 @@ function Checkout() {
     <AppShell>
       <div className="px-4 pb-32">
         <TrustHeader title="Submit Purchase Order" back="/cart" />
-
-        {!isAuthed && (
-          <section className="mt-5 rounded-2xl border border-divider bg-surface p-4">
-            <h2 className="text-[14px] font-semibold text-ink">Company details</h2>
-            <p className="mt-1 text-[12px] text-ink-muted">
-              First time here — we'll set up your Tradly workspace as you submit.
-            </p>
-            <div className="mt-4 space-y-3">
-              <Field label="Company name" value={companyName} onChange={setCompanyName} />
-              <Field label="KRA PIN" value={kraPin} onChange={setKraPin} />
-              <Field label="Phone" value={phone} onChange={setPhone} inputMode="tel" />
-            </div>
-          </section>
-        )}
 
         <section className="mt-5">
           <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-muted">Deliver to</h2>
@@ -172,19 +178,5 @@ function Checkout() {
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function Field({ label, value, onChange, inputMode }: {
-  label: string; value: string; onChange: (v: string) => void; inputMode?: "text" | "tel" | "email";
-}) {
-  return (
-    <label className="block">
-      <span className="text-[12px] font-medium text-ink-muted">{label}</span>
-      <input
-        value={value} onChange={(e) => onChange(e.target.value)} inputMode={inputMode}
-        className="mt-1 w-full rounded-xl border border-divider bg-background px-3 py-2.5 text-[14px] text-ink focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20"
-      />
-    </label>
   );
 }

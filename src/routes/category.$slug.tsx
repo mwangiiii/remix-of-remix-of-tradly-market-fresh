@@ -5,9 +5,8 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { SearchBar } from "../marketplace/components/SearchBar";
-import { getProductsByCategory } from "../marketplace/api/mockMarketplaceApi";
+import { getProductsByCategory } from "../marketplace/api/marketplaceApi";
 import { categories } from "../marketplace/mockData/categories";
-import { useCatalogVersion } from "../marketplace/store/catalogStore";
 
 export const Route = createFileRoute("/category/$slug")({
   head: ({ params }) => {
@@ -39,9 +38,8 @@ export const Route = createFileRoute("/category/$slug")({
 
 function CategoryView() {
   const { category } = Route.useLoaderData();
-  const catalogVersion = useCatalogVersion();
   const { data: products = [] } = useQuery({
-    queryKey: ["category", category.slug, catalogVersion],
+    queryKey: ["category", category.slug],
     queryFn: () => getProductsByCategory(category.slug),
   });
 

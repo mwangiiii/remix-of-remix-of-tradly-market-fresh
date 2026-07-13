@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
-import { getNotifications } from "../marketplace/api/mockMarketplaceApi";
+import { getNotifications } from "../marketplace/api/marketplaceApi";
 import { Bell } from "lucide-react";
 
 export const Route = createFileRoute("/notifications")({

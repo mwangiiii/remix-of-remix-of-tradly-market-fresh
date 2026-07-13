@@ -2,14 +2,19 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PackageCheck, X, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { getOrders, updateOrderStatus } from "../marketplace/api/mockMarketplaceApi";
+import { getOrders, updateOrderStatus } from "../marketplace/api/marketplaceApi";
 import { StatusBadge } from "../marketplace/components/StatusBadge";
 import { formatKes } from "../marketplace/lib/format";
 import type { OrderStatus } from "../marketplace/types/marketplace";
+import { RequireAdmin } from "@/components/RequireAdmin";
 
 export const Route = createFileRoute("/admin/orders")({
   head: () => ({ meta: [{ title: "Orders — Tradly Admin" }, { name: "robots", content: "noindex" }] }),
-  component: OrdersAdmin,
+  component: () => (
+    <RequireAdmin>
+      <OrdersAdmin />
+    </RequireAdmin>
+  ),
 });
 
 function OrdersAdmin() {

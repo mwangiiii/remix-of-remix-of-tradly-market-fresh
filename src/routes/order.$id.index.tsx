@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { StatusBadge } from "../marketplace/components/StatusBadge";
-import { getOrder } from "../marketplace/api/mockMarketplaceApi";
+import { getOrder } from "../marketplace/api/marketplaceApi";
 import { formatKes } from "../marketplace/lib/format";
 import type { MarketplaceOrder, OrderStatus } from "../marketplace/types/marketplace";
 

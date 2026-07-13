@@ -7,10 +7,9 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { QuantityStepper } from "../marketplace/components/QuantityStepper";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { FullscreenGallery } from "../marketplace/components/FullscreenGallery";
-import { getProduct, getAllProducts } from "../marketplace/api/mockMarketplaceApi";
+import { getProduct, getAllProducts } from "../marketplace/api/marketplaceApi";
 import { products as productSeed } from "../marketplace/mockData/products";
 import { useCartStore } from "../marketplace/store/cartStore";
-import { useCatalogVersion } from "../marketplace/store/catalogStore";
 import { formatKes } from "../marketplace/lib/format";
 import { MapPin, ShieldCheck, Maximize2 } from "lucide-react";
 
@@ -40,9 +39,8 @@ export const Route = createFileRoute("/product/$slug")({
 
 function ProductDetail() {
   const { product: initial } = Route.useLoaderData() as { product: import("../marketplace/types/marketplace").MarketplaceProduct };
-  const catalogVersion = useCatalogVersion();
   const { data: fresh } = useQuery({
-    queryKey: ["product", initial.slug, catalogVersion],
+    queryKey: ["product", initial.slug],
     queryFn: () => getProduct(initial.slug),
     initialData: initial,
   });
@@ -63,7 +61,7 @@ function ProductDetail() {
   const galleryImages = product.galleryUrls.length > 0 ? product.galleryUrls : [product.thumbnailUrl];
 
   const { data: allProducts = [] } = useQuery({
-    queryKey: ["products", catalogVersion],
+    queryKey: ["products"],
     queryFn: getAllProducts,
   });
   const related = allProducts

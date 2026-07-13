@@ -8,11 +8,11 @@ export function CategoryPillRow({ activeSlug }: { activeSlug?: string }) {
         {categories.map((c) => {
           const active = c.slug === activeSlug;
           return (
-            <li key={c.id}>
+            <li key={c.id} className="shrink-0">
               <Link
                 to="/category/$slug"
                 params={{ slug: c.slug }}
-                className={`inline-flex shrink-0 items-center rounded-full px-4 py-2 text-[13px] font-medium transition-colors ${
+                className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-medium transition-colors ${
                   active
                     ? "bg-farm text-farm-foreground"
                     : "bg-surface text-ink border border-divider hover:border-farm/40"

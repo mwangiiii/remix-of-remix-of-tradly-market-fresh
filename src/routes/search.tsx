@@ -7,7 +7,7 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { SearchBar } from "../marketplace/components/SearchBar";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
-import { searchProducts } from "../marketplace/api/mockMarketplaceApi";
+import { searchProducts } from "../marketplace/api/marketplaceApi";
 import { categories } from "../marketplace/mockData/categories";
 
 const searchSchema = z.object({ q: z.string().optional() });
@@ -107,7 +107,7 @@ function FilterChip({ active, children, onClick }: { active: boolean; children: 
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors ${
         active
           ? "border-trust bg-trust text-trust-foreground"
           : "border-divider bg-surface text-ink-muted hover:text-ink"

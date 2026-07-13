@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
-import { getSavedLists } from "../marketplace/api/mockMarketplaceApi";
+import { getSavedLists } from "../marketplace/api/marketplaceApi";
 import { ChevronRight, ListPlus } from "lucide-react";
 
 export const Route = createFileRoute("/lists/")({
