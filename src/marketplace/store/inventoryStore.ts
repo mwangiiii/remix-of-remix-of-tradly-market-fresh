@@ -5,6 +5,26 @@ import type { MarketplaceProductUnit } from "../types/marketplace";
 
 export type InventoryStatus = MarketplaceProductUnit["availability"];
 
+export type InventoryEventKind = "reserve" | "release" | "fulfill";
+
+export interface InventoryEvent {
+  id: string;
+  unitId: string;
+  kind: InventoryEventKind;
+  qty: number;
+  timestamp: string;
+  orderId?: string;
+  /** PO / request number, or GRN reference. */
+  reference?: string;
+  note?: string;
+}
+
+export interface InventoryEventMeta {
+  orderId?: string;
+  reference?: string;
+  note?: string;
+}
+
 export interface InventoryRecord {
   available: number;
   reserved: number;
@@ -15,16 +35,18 @@ export interface InventoryRecord {
 
 interface InventoryState {
   records: Record<string, InventoryRecord>;
+  events: InventoryEvent[];
   setAvailable: (unitId: string, available: number) => void;
   setReserved: (unitId: string, reserved: number) => void;
   setStatus: (unitId: string, status: InventoryStatus | null) => void;
   resetUnit: (unitId: string) => void;
   /** PO generated → hold qty against a unit. */
-  reserve: (unitId: string, qty: number) => void;
+  reserve: (unitId: string, qty: number, meta?: InventoryEventMeta) => void;
   /** Order cancelled → release the hold back into pool. */
-  releaseReservation: (unitId: string, qty: number) => void;
+  releaseReservation: (unitId: string, qty: number, meta?: InventoryEventMeta) => void;
   /** GRN received → consume the hold from available stock. */
-  fulfillReservation: (unitId: string, qty: number) => void;
+  fulfillReservation: (unitId: string, qty: number, meta?: InventoryEventMeta) => void;
+  eventsForUnit: (unitId: string) => InventoryEvent[];
 }
 
 // Seed defaults per unit based on availability label from mock data
