@@ -27,6 +27,7 @@ import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminCategoriesRouteImport } from './routes/admin.categories'
 import { Route as AdminCatalogRouteImport } from './routes/admin.catalog'
+import { Route as OrderIdIndexRouteImport } from './routes/order.$id.index'
 import { Route as OrderIdConfirmationRouteImport } from './routes/order.$id.confirmation'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -119,6 +120,11 @@ const AdminCatalogRoute = AdminCatalogRouteImport.update({
   path: '/admin/catalog',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OrderIdIndexRoute = OrderIdIndexRouteImport.update({
+  id: '/order/$id/',
+  path: '/order/$id/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OrderIdConfirmationRoute = OrderIdConfirmationRouteImport.update({
   id: '/order/$id/confirmation',
   path: '/order/$id/confirmation',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
+  '/order/$id/': typeof OrderIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/lists': typeof ListsIndexRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
+  '/order/$id': typeof OrderIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -188,6 +196,7 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
+  '/order/$id/': typeof OrderIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -211,6 +220,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/lists/'
     | '/order/$id/confirmation'
+    | '/order/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/lists'
     | '/order/$id/confirmation'
+    | '/order/$id'
   id:
     | '__root__'
     | '/'
@@ -253,6 +264,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/lists/'
     | '/order/$id/confirmation'
+    | '/order/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -275,6 +287,7 @@ export interface RootRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
   ListsIndexRoute: typeof ListsIndexRoute
   OrderIdConfirmationRoute: typeof OrderIdConfirmationRoute
+  OrderIdIndexRoute: typeof OrderIdIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -405,6 +418,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCatalogRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/order/$id/': {
+      id: '/order/$id/'
+      path: '/order/$id'
+      fullPath: '/order/$id/'
+      preLoaderRoute: typeof OrderIdIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/order/$id/confirmation': {
       id: '/order/$id/confirmation'
       path: '/order/$id/confirmation'
@@ -435,17 +455,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
   ListsIndexRoute: ListsIndexRoute,
   OrderIdConfirmationRoute: OrderIdConfirmationRoute,
+  OrderIdIndexRoute: OrderIdIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

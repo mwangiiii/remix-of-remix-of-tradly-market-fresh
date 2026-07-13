@@ -1,17 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import {
   useInventoryStore,
   remainingOf,
   deriveStatus,
   type InventoryStatus,
+  type InventoryEvent,
 } from "../marketplace/store/inventoryStore";
 import { products } from "../marketplace/mockData/products";
 import { categories } from "../marketplace/mockData/categories";
 import { formatKes } from "../marketplace/lib/format";
 import {
-  ArrowLeft, Package, Search, ShieldCheck, RotateCcw,
+  ArrowLeft, Package, Search, ShieldCheck, RotateCcw, History, X,
+  ArrowDownRight, ArrowUpRight, CheckCircle2,
 } from "lucide-react";
 
 export const Route = createFileRoute("/admin/inventory")({
@@ -37,6 +40,7 @@ const labelOf = (s: InventoryStatus) => STATUSES.find((x) => x.value === s)!.lab
 
 function InventoryAdmin() {
   const records = useInventoryStore((s) => s.records);
+  const events = useInventoryStore((s) => s.events);
   const setAvailable = useInventoryStore((s) => s.setAvailable);
   const setReserved = useInventoryStore((s) => s.setReserved);
   const setStatus = useInventoryStore((s) => s.setStatus);
@@ -44,6 +48,11 @@ function InventoryAdmin() {
   const [query, setQuery] = useState("");
   const [categoryId, setCategoryId] = useState<string | "all">("all");
   const [statusFilter, setStatusFilter] = useState<InventoryStatus | "all">("all");
+  const [logUnit, setLogUnit] = useState<{ unitId: string; productName: string; unitLabel: string } | null>(null);
+  const logEvents = useMemo(
+    () => (logUnit ? events.filter((e) => e.unitId === logUnit.unitId) : []),
+    [events, logUnit],
+  );
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -184,17 +193,28 @@ function InventoryAdmin() {
                         />
                       </td>
                       <td className="px-3 py-3 text-right">
-                        {pinned && (
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
-                            onClick={() => { setStatus(unit.id, null); toast.success("Status now auto-derived"); }}
+                            onClick={() => setLogUnit({ unitId: unit.id, productName: product.name, unitLabel: unit.unitLabel })}
                             className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"
-                            aria-label="Reset to auto"
-                            title="Reset to auto-derived status"
+                            aria-label="View reservation history"
+                            title="Reservation history"
                           >
-                            <RotateCcw className="h-3.5 w-3.5" />
+                            <History className="h-3.5 w-3.5" />
                           </button>
-                        )}
+                          {pinned && (
+                            <button
+                              type="button"
+                              onClick={() => { setStatus(unit.id, null); toast.success("Status now auto-derived"); }}
+                              className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"
+                              aria-label="Reset to auto"
+                              title="Reset to auto-derived status"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -244,6 +264,13 @@ function InventoryAdmin() {
                       </span>
                     </MobileField>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setLogUnit({ unitId: unit.id, productName: product.name, unitLabel: unit.unitLabel })}
+                    className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold text-trust"
+                  >
+                    <History className="h-3.5 w-3.5" /> Reservation history
+                  </button>
                 </li>
               );
             })}
@@ -258,9 +285,81 @@ function InventoryAdmin() {
           Remaining = Available − Reserved. Status auto-derives (Out of stock at 0, Low stock at ≤ 25) unless pinned.
         </p>
       </main>
+
+      {logUnit && (
+        <AuditLogModal
+          title={`${logUnit.productName} · ${logUnit.unitLabel}`}
+          events={logEvents}
+          onClose={() => setLogUnit(null)}
+        />
+      )}
     </div>
   );
 }
+
+function AuditLogModal({
+  title, events, onClose,
+}: { title: string; events: InventoryEvent[]; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex bg-black/50" onClick={onClose}>
+      <div className="ml-auto flex h-full w-full max-w-md flex-col bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <header className="flex items-center justify-between border-b border-divider bg-surface px-6 py-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Reservation history</p>
+            <h2 className="truncate text-[16px] font-semibold text-ink">{title}</h2>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-muted" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {events.length === 0 ? (
+            <p className="py-10 text-center text-[13px] text-ink-muted">
+              No reservation events yet. Events log when a PO is generated, a GRN is posted, or an order is cancelled.
+            </p>
+          ) : (
+            <ol className="space-y-3">
+              {events.map((e) => {
+                const meta = KIND_META[e.kind];
+                const Icon = meta.icon;
+                return (
+                  <li key={e.id} className="flex gap-3 rounded-xl border border-divider bg-surface p-3">
+                    <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${meta.tone}`}>
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="text-[13px] font-semibold text-ink">
+                          {meta.label}
+                          <span className={`ml-2 font-bold tabular-nums ${meta.qtyTone}`}>
+                            {meta.sign}{e.qty}
+                          </span>
+                        </p>
+                        <span className="shrink-0 text-[11px] text-ink-muted">
+                          {format(new Date(e.timestamp), "d MMM, HH:mm")}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[12px] text-ink-muted">
+                        {e.reference ? <span className="font-medium text-ink">{e.reference}</span> : "Manual"}
+                        {e.note ? ` · ${e.note}` : ""}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const KIND_META = {
+  reserve: { label: "Reserved", sign: "+", tone: "bg-trust/12 text-trust-deep", qtyTone: "text-trust-deep", icon: ArrowUpRight },
+  release: { label: "Released", sign: "−", tone: "bg-muted text-ink",           qtyTone: "text-ink",        icon: ArrowDownRight },
+  fulfill: { label: "Fulfilled (GRN)", sign: "−", tone: "bg-farm/15 text-farm", qtyTone: "text-farm",       icon: CheckCircle2 },
+} as const;
 
 /* ---------- helpers ---------- */
 
