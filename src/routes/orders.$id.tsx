@@ -63,7 +63,7 @@ function reachedIndex(status: OrderStatus): number {
 }
 
 function OrderDetail() {
-  const { order } = Route.useLoaderData();
+  const { order } = Route.useLoaderData() as { order: MarketplaceOrder };
   const cancelled = order.status === "cancelled";
   const reached = reachedIndex(order.status);
 
