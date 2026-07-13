@@ -8,7 +8,7 @@ import { AppShell } from "../marketplace/components/AppShell";
 import { StatusBadge } from "../marketplace/components/StatusBadge";
 import { getOrder } from "../marketplace/api/mockMarketplaceApi";
 import { formatKes } from "../marketplace/lib/format";
-import type { OrderStatus } from "../marketplace/types/marketplace";
+import type { MarketplaceOrder, OrderStatus } from "../marketplace/types/marketplace";
 
 export const Route = createFileRoute("/orders/$id")({
   head: () => ({
