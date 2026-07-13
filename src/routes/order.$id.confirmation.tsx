@@ -16,6 +16,7 @@ const steps = ["Submitted", "Approved", "Delivered", "Invoiced"];
 
 function OrderConfirmation() {
   const { pr = "PR-????" } = Route.useSearch();
+  const { id } = Route.useParams();
 
   return (
     <AppShell hideNav>
