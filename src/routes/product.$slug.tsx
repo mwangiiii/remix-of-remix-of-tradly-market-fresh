@@ -37,7 +37,7 @@ export const Route = createFileRoute("/product/$slug")({
 });
 
 function ProductDetail() {
-  const { product } = Route.useLoaderData();
+  const { product } = Route.useLoaderData() as { product: import("../marketplace/types/marketplace").MarketplaceProduct };
   const navigate = useNavigate();
   const [selectedUnitId, setSelectedUnitId] = useState(
     (product.units.find((u) => u.isDefault) ?? product.units[0]).id,

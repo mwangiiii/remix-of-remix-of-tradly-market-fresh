@@ -17,10 +17,10 @@ export const Route = createFileRoute("/lists/$id")({
 });
 
 function ListDetail() {
-  const { list } = Route.useLoaderData();
+  const { list } = Route.useLoaderData() as { list: import("../marketplace/types/marketplace").SavedList };
   const navigate = useNavigate();
   const loadLines = useCartStore((s) => s.loadLines);
-  const total = list.items.reduce((s, i) => s + i.priceKes * i.quantity, 0);
+  const total = list.items.reduce((s: number, i) => s + i.priceKes * i.quantity, 0);
 
   const addAll = () => {
     loadLines(list.items);
