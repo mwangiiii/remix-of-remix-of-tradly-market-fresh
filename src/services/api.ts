@@ -7,14 +7,15 @@ import { attachInterceptors } from "@/services/axiosInterceptor";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 
-if (!SUPABASE_URL) {
+export const FUNCTIONS_BASE = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1` : "";
+
+function assertSupabaseUrl(): void {
+  if (SUPABASE_URL) return;
   throw new Error(
-    "[api.ts] VITE_SUPABASE_URL is not set. Add it to .env:\n" +
+    "[api.ts] VITE_SUPABASE_URL is not set. Add it to your Vercel project env vars (and .env locally):\n" +
       "  VITE_SUPABASE_URL=https://<project-ref>.supabase.co",
   );
 }
-
-export const FUNCTIONS_BASE = `${SUPABASE_URL}/functions/v1`;
 
 export interface TradlyEnvelope<T> {
   data: T;
@@ -23,7 +24,7 @@ export interface TradlyEnvelope<T> {
 }
 
 export const api: AxiosInstance = axios.create({
-  baseURL: FUNCTIONS_BASE,
+  baseURL: FUNCTIONS_BASE || undefined,
   timeout: 30_000,
   withCredentials: true, // sends the httpOnly refresh cookie
   headers: {
@@ -32,13 +33,16 @@ export const api: AxiosInstance = axios.create({
   },
 });
 
-attachInterceptors(api, FUNCTIONS_BASE);
+if (FUNCTIONS_BASE) {
+  attachInterceptors(api, FUNCTIONS_BASE);
+}
 
 export async function apiGet<T>(
   path: string,
   params?: Record<string, unknown>,
   config?: AxiosRequestConfig,
 ): Promise<T> {
+  assertSupabaseUrl();
   const { data: envelope } = await api.get<TradlyEnvelope<T>>(path, { params, ...config });
   return envelope.data;
 }
@@ -48,6 +52,7 @@ export async function apiPost<T>(
   body?: unknown,
   config?: AxiosRequestConfig,
 ): Promise<T> {
+  assertSupabaseUrl();
   const { data: envelope } = await api.post<TradlyEnvelope<T>>(path, body, config);
   return envelope.data;
 }
@@ -57,6 +62,7 @@ export async function apiPatch<T>(
   body?: unknown,
   config?: AxiosRequestConfig,
 ): Promise<T> {
+  assertSupabaseUrl();
   const { data: envelope } = await api.patch<TradlyEnvelope<T>>(path, body, config);
   return envelope.data;
 }
@@ -65,6 +71,7 @@ export async function apiDelete<T = void>(
   path: string,
   config?: AxiosRequestConfig,
 ): Promise<T> {
+  assertSupabaseUrl();
   const { data: envelope } = await api.delete<TradlyEnvelope<T>>(path, config);
   return envelope.data;
 }
