@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save, X, CalendarClock, Package } from "lucide-react";
-import { useCatalogStore, getEffectiveCatalog } from "../marketplace/store/catalogStore";
+import { useCatalogStore, getEffectiveCatalog, effectivePriceFor } from "../marketplace/store/catalogStore";
 import { formatKes } from "../marketplace/lib/format";
 import type { MarketplaceProduct, MarketplaceProductUnit, ScheduledPrice } from "../marketplace/types/marketplace";
 
