@@ -91,13 +91,13 @@ function Account() {
         </section>
 
         <Link
-          to="/admin/inventory"
+          to="/admin"
           className="mt-5 flex items-center justify-between rounded-2xl border border-divider bg-surface p-5 hover:border-trust/40"
         >
           <div>
             <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Tradly staff</p>
-            <p className="mt-1 text-[14px] font-semibold text-ink">Inventory admin</p>
-            <p className="text-[12px] text-ink-muted">Manage stock, reservations and availability</p>
+            <p className="mt-1 text-[14px] font-semibold text-ink">Admin console</p>
+            <p className="text-[12px] text-ink-muted">Catalog, categories, inventory and order fulfilment</p>
           </div>
           <span className="rounded-full bg-trust/10 px-3 py-1 text-[11px] font-semibold text-trust-deep">Open</span>
         </Link>

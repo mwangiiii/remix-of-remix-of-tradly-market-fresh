@@ -53,7 +53,8 @@ export type OrderStatus =
   | "po_generated"
   | "delivered"
   | "invoiced"
-  | "paid";
+  | "paid"
+  | "cancelled";
 
 export interface MarketplaceOrder {
   id: string;
@@ -71,4 +72,14 @@ export interface NotificationItem {
   body: string;
   timestamp: string;
   requestNumber?: string;
+}
+
+/** Scheduled effective-dated price for a specific product unit. */
+export interface ScheduledPrice {
+  id: string;
+  productUnitId: string;
+  priceKes: number;
+  /** ISO date (YYYY-MM-DD). Applies on and after this date until superseded. */
+  effectiveFrom: string;
+  note?: string;
 }
