@@ -19,6 +19,12 @@ interface InventoryState {
   setReserved: (unitId: string, reserved: number) => void;
   setStatus: (unitId: string, status: InventoryStatus | null) => void;
   resetUnit: (unitId: string) => void;
+  /** PO generated → hold qty against a unit. */
+  reserve: (unitId: string, qty: number) => void;
+  /** Order cancelled → release the hold back into pool. */
+  releaseReservation: (unitId: string, qty: number) => void;
+  /** GRN received → consume the hold from available stock. */
+  fulfillReservation: (unitId: string, qty: number) => void;
 }
 
 // Seed defaults per unit based on availability label from mock data
@@ -38,28 +44,35 @@ for (const p of products) {
 }
 
 const now = () => new Date().toISOString();
+const clamp = (n: number) => Math.max(0, Math.floor(n));
+
+const withRecord = (
+  records: Record<string, InventoryRecord>,
+  unitId: string,
+  mut: (r: InventoryRecord) => InventoryRecord,
+): Record<string, InventoryRecord> => {
+  const cur = records[unitId] ?? { available: 0, reserved: 0, updatedAt: now() };
+  return { ...records, [unitId]: { ...mut(cur), updatedAt: now() } };
+};
 
 export const useInventoryStore = create<InventoryState>()(
   persist(
     (set) => ({
       records: initialRecords,
       setAvailable: (unitId, available) =>
-        set((s) => {
-          const cur = s.records[unitId] ?? { available: 0, reserved: 0, updatedAt: now() };
-          return { records: { ...s.records, [unitId]: { ...cur, available: Math.max(0, available), updatedAt: now() } } };
-        }),
+        set((s) => ({ records: withRecord(s.records, unitId, (r) => ({ ...r, available: clamp(available) })) })),
       setReserved: (unitId, reserved) =>
-        set((s) => {
-          const cur = s.records[unitId] ?? { available: 0, reserved: 0, updatedAt: now() };
-          return { records: { ...s.records, [unitId]: { ...cur, reserved: Math.max(0, reserved), updatedAt: now() } } };
-        }),
+        set((s) => ({ records: withRecord(s.records, unitId, (r) => ({ ...r, reserved: clamp(reserved) })) })),
       setStatus: (unitId, status) =>
         set((s) => {
-          const cur = s.records[unitId] ?? { available: 0, reserved: 0, updatedAt: now() };
-          const next: InventoryRecord = { ...cur, updatedAt: now() };
-          if (status === null) delete next.statusOverride;
-          else next.statusOverride = status;
-          return { records: { ...s.records, [unitId]: next } };
+          return {
+            records: withRecord(s.records, unitId, (r) => {
+              const next: InventoryRecord = { ...r };
+              if (status === null) delete next.statusOverride;
+              else next.statusOverride = status;
+              return next;
+            }),
+          };
         }),
       resetUnit: (unitId) =>
         set((s) => {
@@ -67,10 +80,22 @@ export const useInventoryStore = create<InventoryState>()(
           delete rest[unitId];
           return { records: rest };
         }),
+      reserve: (unitId, qty) =>
+        set((s) => ({ records: withRecord(s.records, unitId, (r) => ({ ...r, reserved: clamp(r.reserved + qty) })) })),
+      releaseReservation: (unitId, qty) =>
+        set((s) => ({ records: withRecord(s.records, unitId, (r) => ({ ...r, reserved: clamp(r.reserved - qty) })) })),
+      fulfillReservation: (unitId, qty) =>
+        set((s) =>
+          ({ records: withRecord(s.records, unitId, (r) => ({
+            ...r,
+            reserved: clamp(r.reserved - qty),
+            available: clamp(r.available - qty),
+          })) }),
+        ),
     }),
     {
       name: "tradly-marketplace-inventory",
-      version: 1,
+      version: 2,
       // Merge persisted records over freshly-seeded defaults so newly-added
       // products still appear on next boot without clearing existing edits.
       merge: (persisted, current) => {

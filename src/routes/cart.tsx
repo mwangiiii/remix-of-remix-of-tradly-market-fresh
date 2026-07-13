@@ -20,9 +20,15 @@ function Cart() {
   const subtotal = cartSubtotal(lines);
 
   return (
-    <AppShell>
-      <div className="px-4">
-        <BrowseHeader title="Your cart" back="/" />
+    <AppShell variant="focused">
+      <div className="px-4 lg:px-8 lg:pb-12">
+        <div className="lg:hidden">
+          <BrowseHeader title="Cart" back="/" />
+        </div>
+        <div className="hidden pt-10 pb-6 lg:block">
+          <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-ink-muted">Your cart</p>
+          <h1 className="mt-2 text-[36px] font-semibold tracking-tight text-ink">Review your order</h1>
+        </div>
 
         {lines.length === 0 ? (
           <div className="flex flex-col items-center gap-4 py-24 text-center">
@@ -30,80 +36,118 @@ function Cart() {
               <ShoppingBag className="h-7 w-7 text-ink-muted" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-ink">Your cart is empty</h2>
-              <p className="mt-1 text-sm text-ink-muted">Add produce to get started.</p>
+              <h2 className="text-lg font-semibold text-ink">Nothing here yet</h2>
+              <p className="mt-1 text-sm text-ink-muted">Start with today's fresh picks.</p>
             </div>
             <Link
               to="/"
-              className="rounded-full bg-farm px-5 py-2.5 text-sm font-semibold text-farm-foreground"
+              className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-background"
             >
-              Browse categories
+              Browse the market
             </Link>
           </div>
         ) : (
-          <>
-            <ul className="divide-y divide-divider">
-              {lines.map((l) => (
-                <li key={l.productUnitId} className="flex items-center gap-3 py-4">
-                  <Link
-                    to="/product/$slug"
-                    params={{ slug: l.productSlug }}
-                    className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-surface soft-shadow"
-                  >
-                    <img src={l.thumbnailUrl} alt={l.productName} className="h-full w-full object-cover" />
-                  </Link>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold text-ink">{l.productName}</p>
-                    <p className="text-[12px] text-ink-muted">{l.unitLabel}</p>
-                    <p className="mt-1 text-[13px] font-semibold text-farm">{formatKes(l.priceKes * l.quantity)}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => removeLine(l.productUnitId)}
-                      className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-destructive"
-                      aria-label="Remove"
+          <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
+            <div>
+              <ul className="divide-y divide-divider">
+                {lines.map((l) => (
+                  <li key={l.productUnitId} className="flex items-center gap-3 py-4 lg:gap-5 lg:py-5">
+                    <Link
+                      to="/product/$slug"
+                      params={{ slug: l.productSlug }}
+                      className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-surface soft-shadow lg:h-20 lg:w-20"
                     >
-                      <X className="h-4 w-4" />
-                    </button>
-                    <QuantityStepper
-                      value={l.quantity}
-                      onChange={(v) => setQuantity(l.productUnitId, v)}
-                      size="sm"
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <img src={l.thumbnailUrl} alt={l.productName} className="h-full w-full object-cover" />
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-semibold text-ink lg:text-[15.5px]">{l.productName}</p>
+                      <p className="text-[12px] text-ink-muted">{l.unitLabel} · {formatKes(l.priceKes)}</p>
+                      <p className="mt-1 text-[13px] font-semibold tabular-nums text-ink lg:hidden">
+                        {formatKes(l.priceKes * l.quantity)}
+                      </p>
+                    </div>
+                    <div className="hidden w-32 text-right text-[15px] font-semibold tabular-nums text-ink lg:block">
+                      {formatKes(l.priceKes * l.quantity)}
+                    </div>
+                    <div className="flex flex-col items-end gap-2 lg:flex-row lg:items-center lg:gap-3">
+                      <QuantityStepper
+                        value={l.quantity}
+                        onChange={(v) => setQuantity(l.productUnitId, v)}
+                        size="sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeLine(l.productUnitId)}
+                        className="grid h-7 w-7 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-destructive"
+                        aria-label="Remove"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
-            <button
-              type="button"
-              onClick={() => toast.success("Saved for later in your list")}
-              className="mt-4 inline-flex items-center gap-2 text-[13px] font-medium text-trust"
-            >
-              <BookmarkPlus className="h-4 w-4" /> Save cart to a list
-            </button>
+              <button
+                type="button"
+                onClick={() => toast.success("Saved to a list for later")}
+                className="mt-4 inline-flex items-center gap-2 text-[13px] font-medium text-ink-muted hover:text-ink"
+              >
+                <BookmarkPlus className="h-4 w-4" /> Save cart to a list
+              </button>
 
-            <p className="mt-8 text-[11px] leading-relaxed text-ink-muted">
-              VAT is calculated at purchase order stage, on your Tradly invoice.
-            </p>
-          </>
+              <p className="mt-6 text-[11px] leading-relaxed text-ink-muted lg:text-[12px]">
+                VAT and eTIMS invoice are calculated when Tradly Finance issues your PO.
+              </p>
+            </div>
+
+            {/* Desktop order summary */}
+            <aside className="mt-8 hidden self-start rounded-3xl border border-divider bg-surface p-6 lg:sticky lg:top-24 lg:mt-0 lg:block">
+              <p className="text-[12px] font-medium uppercase tracking-[0.14em] text-ink-muted">Summary</p>
+              <dl className="mt-4 space-y-2 text-[14px]">
+                <div className="flex justify-between text-ink-muted">
+                  <dt>Items</dt>
+                  <dd className="tabular-nums text-ink">{lines.reduce((s, l) => s + l.quantity, 0)}</dd>
+                </div>
+                <div className="flex justify-between text-ink-muted">
+                  <dt>Subtotal</dt>
+                  <dd className="tabular-nums text-ink">{formatKes(subtotal)}</dd>
+                </div>
+                <div className="flex justify-between text-ink-muted">
+                  <dt>VAT</dt>
+                  <dd>at invoice</dd>
+                </div>
+              </dl>
+              <div className="mt-5 flex items-baseline justify-between border-t border-divider pt-4">
+                <span className="text-[13px] font-medium uppercase tracking-wide text-ink-muted">Estimated</span>
+                <span className="text-[22px] font-semibold tabular-nums text-ink">{formatKes(subtotal)}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate({ to: "/checkout" })}
+                className="mt-5 w-full rounded-full bg-ink px-5 py-3.5 text-[14px] font-semibold text-background transition hover:bg-ink/90"
+              >
+                Continue to Purchase Order
+              </button>
+            </aside>
+          </div>
         )}
       </div>
 
+      {/* Mobile sticky footer */}
       {lines.length > 0 && (
-        <div className="fixed inset-x-0 bottom-16 z-30 border-t border-divider bg-surface/95 backdrop-blur">
+        <div className="fixed inset-x-0 bottom-16 z-30 border-t border-divider bg-surface/95 backdrop-blur lg:hidden">
           <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 py-3">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Subtotal</p>
-              <p className="text-[18px] font-bold text-trust">{formatKes(subtotal)}</p>
+              <p className="text-[18px] font-semibold tabular-nums text-ink">{formatKes(subtotal)}</p>
             </div>
             <button
               type="button"
               onClick={() => navigate({ to: "/checkout" })}
-              className="flex-1 rounded-full bg-trust px-5 py-3 text-[14px] font-semibold text-trust-foreground shadow-sm hover:bg-trust/95"
+              className="flex-1 rounded-full bg-ink px-5 py-3 text-[14px] font-semibold text-background shadow-sm"
             >
-              Submit Purchase Order
+              Continue
             </button>
           </div>
         </div>
