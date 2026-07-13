@@ -67,7 +67,7 @@ function Orders() {
                   <span className="text-[15px] font-bold text-trust">{formatKes(o.totalKes)}</span>
                   <div className="flex items-center gap-2">
                     <Link
-                      to="/order/$id/confirmation" params={{ id: o.id }} search={{ pr: o.requestNumber }}
+                      to="/orders/$id" params={{ id: o.id }}
                       className="rounded-full border border-divider px-3.5 py-1.5 text-[12px] font-semibold text-ink"
                     >
                       View
