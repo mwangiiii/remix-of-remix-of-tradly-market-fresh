@@ -6,10 +6,10 @@ import {
   remainingOf,
   deriveStatus,
   type InventoryStatus,
-} from "../../marketplace/store/inventoryStore";
-import { products } from "../../marketplace/mockData/products";
-import { categories } from "../../marketplace/mockData/categories";
-import { formatKes } from "../../marketplace/lib/format";
+} from "../marketplace/store/inventoryStore";
+import { products } from "../marketplace/mockData/products";
+import { categories } from "../marketplace/mockData/categories";
+import { formatKes } from "../marketplace/lib/format";
 import {
   ArrowLeft, Package, Search, ShieldCheck, RotateCcw,
 } from "lucide-react";
