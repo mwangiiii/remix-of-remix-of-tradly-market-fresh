@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as NotificationsRouteImport } from './routes/notifications'
@@ -23,6 +24,11 @@ import { Route as ListsIdRouteImport } from './routes/lists.$id'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as OrderIdConfirmationRouteImport } from './routes/order.$id.confirmation'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/search': typeof SearchRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
   '/product/$slug': typeof ProductSlugRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/search': typeof SearchRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
   '/product/$slug': typeof ProductSlugRoute
@@ -129,6 +137,7 @@ export interface FileRoutesById {
   '/notifications': typeof NotificationsRoute
   '/orders': typeof OrdersRoute
   '/search': typeof SearchRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
   '/product/$slug': typeof ProductSlugRoute
@@ -146,6 +155,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/orders'
     | '/search'
+    | '/sitemap.xml'
     | '/category/$slug'
     | '/lists/$id'
     | '/product/$slug'
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/orders'
     | '/search'
+    | '/sitemap.xml'
     | '/category/$slug'
     | '/lists/$id'
     | '/product/$slug'
@@ -176,6 +187,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/orders'
     | '/search'
+    | '/sitemap.xml'
     | '/category/$slug'
     | '/lists/$id'
     | '/product/$slug'
@@ -192,6 +204,7 @@ export interface RootRouteChildren {
   NotificationsRoute: typeof NotificationsRoute
   OrdersRoute: typeof OrdersRoute
   SearchRoute: typeof SearchRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   CategorySlugRoute: typeof CategorySlugRoute
   ListsIdRoute: typeof ListsIdRoute
   ProductSlugRoute: typeof ProductSlugRoute
@@ -201,6 +214,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/search': {
       id: '/search'
       path: '/search'
@@ -304,6 +324,7 @@ const rootRouteChildren: RootRouteChildren = {
   NotificationsRoute: NotificationsRoute,
   OrdersRoute: OrdersRoute,
   SearchRoute: SearchRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   CategorySlugRoute: CategorySlugRoute,
   ListsIdRoute: ListsIdRoute,
   ProductSlugRoute: ProductSlugRoute,
