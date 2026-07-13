@@ -84,7 +84,7 @@ export async function submitMarketplaceOrder(
   orderStore = [order, ...orderStore];
   // Reserve inventory immediately on PO generation
   const inv = useInventoryStore.getState();
-  for (const l of lines) inv.reserve(l.productUnitId, l.quantity);
+  for (const l of lines) inv.reserve(l.productUnitId, l.quantity, { orderId: id, reference: requestNumber, note: "PO generated" });
   return { requestNumber, id };
 }
 
