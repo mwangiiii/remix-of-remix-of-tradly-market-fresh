@@ -70,6 +70,32 @@ function OrderDetail() {
   const { order } = Route.useLoaderData() as { order: MarketplaceOrder };
   const cancelled = order.status === "cancelled";
   const reached = reachedIndex(order.status);
+  const canCancel = CANCELLABLE.includes(order.status);
+  const router = useRouter();
+  const navigate = useNavigate();
+  const loadLines = useCartStore((s) => s.loadLines);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const handleReorder = () => {
+    loadLines(order.lines.map((l) => ({ ...l })));
+    navigate({ to: "/cart" });
+  };
+
+  const handleCancel = async () => {
+    if (!canCancel || cancelling) return;
+    if (!window.confirm(`Cancel order ${order.requestNumber}? This can't be undone.`)) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      await updateOrderStatus(order.id, "cancelled");
+      await router.invalidate();
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : "Couldn't cancel order");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <AppShell>
