@@ -266,6 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── background + focus refresh ──────────────────────────────────────────
   const refreshSilently = useCallback(async () => {
+    if (!api.defaults.baseURL) return;
     try {
       const response = await api.post("/auth-refresh", {});
       const { access_token, expires_in } = response.data as {
