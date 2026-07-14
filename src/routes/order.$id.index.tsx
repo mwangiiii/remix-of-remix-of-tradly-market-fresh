@@ -194,6 +194,29 @@ function OrderDetail() {
           </div>
         </section>
 
+        <section className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={handleReorder}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-divider bg-surface px-5 py-2.5 text-[14px] font-semibold text-ink hover:bg-muted"
+          >
+            <RotateCcw className="h-4 w-4" /> Reorder these items
+          </button>
+          {canCancel && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-destructive/30 bg-surface px-5 py-2.5 text-[14px] font-semibold text-destructive hover:bg-destructive/5 disabled:opacity-60"
+            >
+              <Ban className="h-4 w-4" /> {cancelling ? "Cancelling…" : "Cancel order"}
+            </button>
+          )}
+        </section>
+        {cancelError && (
+          <p className="mt-2 text-right text-[12px] text-destructive">{cancelError}</p>
+        )}
+
         <p className="mt-6 text-center text-[11px] text-ink-muted">
           Sourced from Tradly — Kenya's single-source supply chain.
         </p>
