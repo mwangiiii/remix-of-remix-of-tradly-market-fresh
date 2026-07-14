@@ -63,7 +63,7 @@ export function ProductCard({ product }: { product: MarketplaceProduct }) {
       <div className="relative aspect-square overflow-hidden rounded-2xl bg-surface soft-shadow">
         <img
           src={product.thumbnailUrl}
-          alt={product.name}
+          alt={`Fresh ${product.name} from Tradly`}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />

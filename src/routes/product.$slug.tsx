@@ -289,7 +289,7 @@ function ProductDetail() {
                 >
                   <img
                     src={currentItem?.url ?? product.thumbnailUrl}
-                    alt={currentItem?.altText ?? product.name}
+                    alt={currentItem?.altText ?? `Fresh ${product.name} from Tradly`}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   />
                   <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-80 backdrop-blur transition group-hover:opacity-100">
@@ -310,6 +310,7 @@ function ProductDetail() {
                           key={`${it.url}-${i}`}
                           type="button"
                           onClick={() => setGalleryIdx(i)}
+                          aria-label={`View ${it.kind === "video" ? "video" : "image"} ${i + 1} of ${galleryItems.length}`}
                           className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl transition ${
                             i === galleryIdx ? "ring-2 ring-ink" : "opacity-70 hover:opacity-100"
                           }`}
@@ -329,7 +330,7 @@ function ProductDetail() {
                               </span>
                             </>
                           ) : (
-                            <img src={it.posterUrl ?? it.url} alt="" className="h-full w-full object-cover" />
+                            <img src={it.posterUrl ?? it.url} alt={`${product.name} thumbnail ${i + 1}`} className="h-full w-full object-cover" />
                           )}
                         </button>
                       ))}
