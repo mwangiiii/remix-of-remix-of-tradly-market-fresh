@@ -6,7 +6,6 @@ import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { Wordmark } from "../marketplace/components/BrowseHeader";
 import { getAllProducts, getOrders } from "../marketplace/api/marketplaceApi";
-import { ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -108,15 +107,11 @@ function Home() {
           </section>
         )}
 
-        <section className="mt-12 rounded-3xl border border-divider bg-surface p-5 lg:mt-20 lg:flex lg:items-center lg:gap-6 lg:p-8">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-trust/10 text-trust lg:h-14 lg:w-14">
-            <ShieldCheck className="h-5 w-5 lg:h-6 lg:w-6" />
-          </div>
-          <div className="mt-3 min-w-0 lg:mt-0">
+        <section className="mt-12 rounded-3xl border border-divider bg-surface p-5 lg:mt-20 lg:p-8">
+          <div className="min-w-0">
             <p className="text-[14px] font-semibold text-ink lg:text-[17px]">Sourced by Tradly</p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted lg:text-[14px]">
-              The same Tradly that runs your procurement. One supplier of record.
-              One monthly, eTIMS-ready invoice. Delivered on time.
+            <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.08em] text-trust-deep lg:text-[13px]">
+              Corporate supply assurance
             </p>
           </div>
         </section>

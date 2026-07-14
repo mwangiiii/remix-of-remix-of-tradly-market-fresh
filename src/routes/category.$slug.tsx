@@ -51,12 +51,14 @@ export const Route = createFileRoute("/category/$slug")({
             cat,
             (loaderData as { products?: MarketplaceProduct[] } | undefined)?.products ?? [],
           ),
+          `ld-category-list-${cat.slug}`,
         ),
         jsonLd(
           breadcrumbLd([
             { name: "Home", path: "/" },
             { name: cat.name, path: `/category/${cat.slug}` },
           ]),
+          `ld-breadcrumb-category-${cat.slug}`,
         ),
       ],
     };

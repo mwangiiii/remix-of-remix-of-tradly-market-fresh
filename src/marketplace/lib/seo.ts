@@ -23,6 +23,7 @@ export function siteUrl(path = "/"): string {
 }
 
 export type JsonLdScript = {
+  key: string;
   type: "application/ld+json";
   children: string;
 };
@@ -32,7 +33,7 @@ export type JsonLdScript = {
 const LINE_SEP_RE = new RegExp(String.fromCharCode(0x2028), "g");
 const PARA_SEP_RE = new RegExp(String.fromCharCode(0x2029), "g");
 
-export function jsonLd(payload: Record<string, unknown>): JsonLdScript {
+export function jsonLd(payload: Record<string, unknown>, key: string): JsonLdScript {
   // U+2028 / U+2029 are valid JSON but break inline <script> parsing; </script
   // inside a string would prematurely close the tag. Escape both.
   const body = JSON.stringify(payload)
@@ -40,6 +41,7 @@ export function jsonLd(payload: Record<string, unknown>): JsonLdScript {
     .replace(PARA_SEP_RE, "\\u2029")
     .replace(/<\/(script)/gi, "<\\/$1");
   return {
+    key,
     type: "application/ld+json",
     children: body,
   };

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import {
   MapPin, Receipt, Bell, LogOut, Building2, Mail, Phone,
-  ShieldCheck, ChevronRight,
+  ChevronRight,
 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
@@ -163,16 +163,11 @@ function Account() {
         </section>
 
         {/* Compliance blurb */}
-        <section className="mt-5 flex items-start gap-3 rounded-2xl border border-divider bg-surface p-5">
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-trust/10 text-trust">
-            <ShieldCheck className="h-4 w-4" />
-          </span>
+        <section className="mt-5 rounded-2xl border border-divider bg-surface p-5">
           <div>
             <p className="text-[14px] font-semibold text-ink">Sourced by Tradly</p>
-            <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-              One supplier of record. One monthly, eTIMS-ready invoice. Every marketplace order
-              lands as a Purchase Request in your Tradly account and follows your existing
-              approval and payment flow.
+            <p className="mt-1 text-[12px] font-medium uppercase tracking-[0.08em] text-trust-deep">
+              Corporate supply assurance
             </p>
           </div>
         </section>

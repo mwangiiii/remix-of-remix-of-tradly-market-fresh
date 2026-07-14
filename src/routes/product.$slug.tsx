@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
@@ -19,8 +19,8 @@ import {
   SITE_NAME,
 } from "../marketplace/lib/seo";
 import {
-  MapPin, ShieldCheck, Maximize2,
-  Snowflake, Package, Clock, Thermometer, Globe2, ReceiptText, Boxes,
+  MapPin, Maximize2,
+  Snowflake, Package, Clock, Thermometer, Globe2, ReceiptText, Boxes, ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 /** Small dictionary of the country codes we're likely to see. Fallback is the raw code. */
@@ -81,13 +81,14 @@ export const Route = createFileRoute("/product/$slug")({
       ],
       links: [canonical],
       scripts: [
-        jsonLd(productLd(p, category)),
+        jsonLd(productLd(p, category), `ld-product-${p.slug}`),
         jsonLd(
           breadcrumbLd([
             { name: "Home", path: "/" },
             ...(category ? [{ name: category.name, path: `/category/${category.slug}` }] : []),
             { name: p.name, path: `/product/${p.slug}` },
           ]),
+          `ld-breadcrumb-product-${p.slug}`,
         ),
       ],
     };
@@ -127,6 +128,12 @@ function ProductDetail() {
   const [zoomOpen, setZoomOpen] = useState(false);
   const [qty, setQty] = useState(1);
   const [expanded, setExpanded] = useState(false);
+  const [canThumbScrollLeft, setCanThumbScrollLeft] = useState(false);
+  const [canThumbScrollRight, setCanThumbScrollRight] = useState(false);
+  const swipeStartX = useRef<number | null>(null);
+  const swipeActive = useRef(false);
+  const suppressOpenTap = useRef(false);
+  const desktopThumbRailRef = useRef<HTMLDivElement | null>(null);
   const addLine = useCartStore((s) => s.addLine);
 
   const unit = product.units.find((u) => u.id === selectedUnitId) ?? product.units[0];
@@ -153,6 +160,61 @@ function ProductDetail() {
           (url) => ({ url, kind: "image" as const }),
         );
   const currentItem = galleryItems[galleryIdx] ?? galleryItems[0];
+
+  const onGalleryPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType !== "touch" || galleryItems.length < 2) return;
+    swipeStartX.current = e.clientX;
+    swipeActive.current = false;
+  };
+
+  const onGalleryPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (swipeStartX.current === null) return;
+    if (Math.abs(e.clientX - swipeStartX.current) > 12) swipeActive.current = true;
+  };
+
+  const onGalleryPointerEnd = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (swipeStartX.current === null) return;
+    const dx = e.clientX - swipeStartX.current;
+    if (Math.abs(dx) > 50) {
+      suppressOpenTap.current = true;
+      setGalleryIdx((i) => {
+        if (dx < 0) return Math.min(galleryItems.length - 1, i + 1);
+        return Math.max(0, i - 1);
+      });
+    }
+    swipeStartX.current = null;
+    swipeActive.current = false;
+  };
+
+  useEffect(() => {
+    const updateThumbRailState = () => {
+      const rail = desktopThumbRailRef.current;
+      if (!rail) {
+        setCanThumbScrollLeft(false);
+        setCanThumbScrollRight(false);
+        return;
+      }
+      setCanThumbScrollLeft(rail.scrollLeft > 4);
+      setCanThumbScrollRight(rail.scrollLeft + rail.clientWidth < rail.scrollWidth - 4);
+    };
+
+    updateThumbRailState();
+    const rail = desktopThumbRailRef.current;
+    if (!rail) return;
+
+    rail.addEventListener("scroll", updateThumbRailState, { passive: true });
+    window.addEventListener("resize", updateThumbRailState);
+    return () => {
+      rail.removeEventListener("scroll", updateThumbRailState);
+      window.removeEventListener("resize", updateThumbRailState);
+    };
+  }, [galleryItems.length]);
+
+  const scrollDesktopThumbRail = (direction: -1 | 1) => {
+    const rail = desktopThumbRailRef.current;
+    if (!rail) return;
+    rail.scrollBy({ left: direction * Math.max(rail.clientWidth * 0.75, 160), behavior: "smooth" });
+  };
 
   const { data: allProducts = [] } = useQuery({
     queryKey: ["products"],
@@ -188,72 +250,112 @@ function ProductDetail() {
           {/* Gallery */}
           <div>
             <div className="-mx-4 bg-surface pb-4 lg:mx-0 lg:rounded-3xl lg:pb-0">
-              <button
-                type="button"
-                onClick={() => { setZoomOpen(true); }}
-                className="group relative block aspect-square w-full overflow-hidden lg:rounded-3xl"
-                aria-label={currentItem?.kind === "video" ? "Open fullscreen video" : "Open fullscreen gallery"}
-              >
-                {currentItem?.kind === "video" ? (
-                  <>
-                    <video
-                      key={currentItem.url}
-                      src={currentItem.url}
-                      poster={currentItem.posterUrl ?? product.thumbnailUrl}
-                      preload="metadata"
-                      muted
-                      playsInline
-                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                    />
-                    <span className="absolute inset-0 grid place-items-center">
-                      <span className="grid h-14 w-14 place-items-center rounded-full bg-black/50 text-white text-2xl backdrop-blur-sm">
-                        ▶
-                      </span>
-                    </span>
-                  </>
-                ) : (
+              {currentItem?.kind === "video" ? (
+                <div className="group relative block aspect-square w-full overflow-hidden lg:rounded-3xl">
+                  <video
+                    key={currentItem.url}
+                    src={currentItem.url}
+                    poster={currentItem.posterUrl ?? product.thumbnailUrl}
+                    preload="metadata"
+                    controls
+                    playsInline
+                    className="h-full w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setZoomOpen(true)}
+                    className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-90 backdrop-blur transition hover:opacity-100"
+                    aria-label="Open fullscreen video"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (suppressOpenTap.current) {
+                      suppressOpenTap.current = false;
+                      return;
+                    }
+                    setZoomOpen(true);
+                  }}
+                  onPointerDown={onGalleryPointerDown}
+                  onPointerMove={onGalleryPointerMove}
+                  onPointerUp={onGalleryPointerEnd}
+                  onPointerCancel={onGalleryPointerEnd}
+                  className="group relative block aspect-square w-full overflow-hidden lg:rounded-3xl"
+                  aria-label="Open fullscreen gallery"
+                >
                   <img
                     src={currentItem?.url ?? product.thumbnailUrl}
                     alt={currentItem?.altText ?? product.name}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   />
-                )}
-                <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-80 backdrop-blur transition group-hover:opacity-100">
-                  <Maximize2 className="h-4 w-4" />
-                </span>
-              </button>
+                  <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-80 backdrop-blur transition group-hover:opacity-100">
+                    <Maximize2 className="h-4 w-4" />
+                  </span>
+                </button>
+              )}
               {galleryItems.length > 1 && (
                 <>
                   {/* Desktop thumbnail strip */}
-                  <div className="mt-4 hidden gap-2 lg:flex">
-                    {galleryItems.map((it, i) => (
+                  <div className="relative mt-4 hidden lg:block">
+                    <div
+                      ref={desktopThumbRailRef}
+                      className="hide-scrollbar flex gap-2 overflow-x-auto pb-1"
+                    >
+                      {galleryItems.map((it, i) => (
+                        <button
+                          key={`${it.url}-${i}`}
+                          type="button"
+                          onClick={() => setGalleryIdx(i)}
+                          className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl transition ${
+                            i === galleryIdx ? "ring-2 ring-ink" : "opacity-70 hover:opacity-100"
+                          }`}
+                        >
+                          {it.kind === "video" ? (
+                            <>
+                              <video
+                                src={it.url}
+                                poster={it.posterUrl ?? undefined}
+                                preload="metadata"
+                                muted
+                                playsInline
+                                className="h-full w-full object-cover"
+                              />
+                              <span className="absolute inset-0 grid place-items-center">
+                                <span className="grid h-7 w-7 place-items-center rounded-full bg-black/50 text-[10px] text-white">▶</span>
+                              </span>
+                            </>
+                          ) : (
+                            <img src={it.posterUrl ?? it.url} alt="" className="h-full w-full object-cover" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
                       <button
-                        key={`${it.url}-${i}`}
                         type="button"
-                        onClick={() => setGalleryIdx(i)}
-                        className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl transition ${
-                          i === galleryIdx ? "ring-2 ring-ink" : "opacity-70 hover:opacity-100"
-                        }`}
+                        onClick={() => scrollDesktopThumbRail(-1)}
+                        disabled={!canThumbScrollLeft}
+                        aria-label="Scroll thumbnails left"
+                        className="pointer-events-auto ml-1 grid h-8 w-8 place-items-center rounded-full bg-background/90 text-ink shadow transition disabled:opacity-0"
                       >
-                        {it.kind === "video" ? (
-                          <>
-                            <video
-                              src={it.url}
-                              poster={it.posterUrl ?? undefined}
-                              preload="metadata"
-                              muted
-                              playsInline
-                              className="h-full w-full object-cover"
-                            />
-                            <span className="absolute inset-0 grid place-items-center">
-                              <span className="grid h-7 w-7 place-items-center rounded-full bg-black/50 text-[10px] text-white">▶</span>
-                            </span>
-                          </>
-                        ) : (
-                          <img src={it.posterUrl ?? it.url} alt="" className="h-full w-full object-cover" />
-                        )}
+                        <ChevronLeft className="h-4 w-4" />
                       </button>
-                    ))}
+                    </div>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => scrollDesktopThumbRail(1)}
+                        disabled={!canThumbScrollRight}
+                        aria-label="Scroll thumbnails right"
+                        className="pointer-events-auto mr-1 grid h-8 w-8 place-items-center rounded-full bg-background/90 text-ink shadow transition disabled:opacity-0"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                   {/* Mobile dots */}
                   <div className="mt-3 flex justify-center gap-2 lg:hidden">
@@ -327,9 +429,8 @@ function ProductDetail() {
               </div>
             </div>
 
-            <div className="mt-6 flex items-center gap-2 rounded-2xl bg-trust/8 p-3.5 text-[12.5px] text-trust-deep">
-              <ShieldCheck className="h-4 w-4 shrink-0" />
-              <span>Sourced by Tradly. One supplier. One invoice. eTIMS-compliant.</span>
+            <div className="mt-6 rounded-xl border border-trust/25 bg-trust/8 px-3.5 py-2.5 text-trust-deep">
+              <span className="text-[12px] font-semibold uppercase tracking-[0.08em]">Sourced by Tradly</span>
             </div>
 
             <ProductDetailsList product={product} unit={unit} />
