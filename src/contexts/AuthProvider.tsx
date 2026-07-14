@@ -110,6 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // No auth backend configured (VITE_SUPABASE_URL missing) — stay anonymous
+      // instead of POSTing /auth-refresh against the app origin (which 500s).
+      if (!api.defaults.baseURL) {
+        clearAuthState();
+        return;
+      }
+
       const response = await api.post("/auth-refresh", {});
       const { access_token, expires_in } = response.data as {
         access_token: string;
