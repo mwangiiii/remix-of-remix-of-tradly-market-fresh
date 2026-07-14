@@ -1,14 +1,18 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useRouter, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { format } from "date-fns";
 import {
-  ArrowLeft, FileText, PackageCheck, ReceiptText, CircleDollarSign, Check, XCircle, Clock,
+  ArrowLeft, FileText, PackageCheck, ReceiptText, CircleDollarSign, Check, XCircle, Clock, RotateCcw, Ban,
 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { StatusBadge } from "../marketplace/components/StatusBadge";
-import { getOrder } from "../marketplace/api/marketplaceApi";
+import { getOrder, updateOrderStatus } from "../marketplace/api/marketplaceApi";
 import { formatKes } from "../marketplace/lib/format";
+import { useCartStore } from "../marketplace/store/cartStore";
 import type { MarketplaceOrder, OrderStatus } from "../marketplace/types/marketplace";
+
+const CANCELLABLE: OrderStatus[] = ["draft", "pending_approval", "approved"];
 
 export const Route = createFileRoute("/order/$id/")({
   head: () => ({
@@ -66,6 +70,32 @@ function OrderDetail() {
   const { order } = Route.useLoaderData() as { order: MarketplaceOrder };
   const cancelled = order.status === "cancelled";
   const reached = reachedIndex(order.status);
+  const canCancel = CANCELLABLE.includes(order.status);
+  const router = useRouter();
+  const navigate = useNavigate();
+  const loadLines = useCartStore((s) => s.loadLines);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const handleReorder = () => {
+    loadLines(order.lines.map((l) => ({ ...l })));
+    navigate({ to: "/cart" });
+  };
+
+  const handleCancel = async () => {
+    if (!canCancel || cancelling) return;
+    if (!window.confirm(`Cancel order ${order.requestNumber}? This can't be undone.`)) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      await updateOrderStatus(order.id, "cancelled");
+      await router.invalidate();
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : "Couldn't cancel order");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <AppShell>
@@ -163,6 +193,29 @@ function OrderDetail() {
             <span className="text-[17px] font-bold text-trust">{formatKes(order.totalKes)}</span>
           </div>
         </section>
+
+        <section className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={handleReorder}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-divider bg-surface px-5 py-2.5 text-[14px] font-semibold text-ink hover:bg-muted"
+          >
+            <RotateCcw className="h-4 w-4" /> Reorder these items
+          </button>
+          {canCancel && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-destructive/30 bg-surface px-5 py-2.5 text-[14px] font-semibold text-destructive hover:bg-destructive/5 disabled:opacity-60"
+            >
+              <Ban className="h-4 w-4" /> {cancelling ? "Cancelling…" : "Cancel order"}
+            </button>
+          )}
+        </section>
+        {cancelError && (
+          <p className="mt-2 text-right text-[12px] text-destructive">{cancelError}</p>
+        )}
 
         <p className="mt-6 text-center text-[11px] text-ink-muted">
           Sourced from Tradly — Kenya's single-source supply chain.
