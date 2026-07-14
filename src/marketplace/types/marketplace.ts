@@ -44,7 +44,7 @@ export interface MarketplaceProduct {
   /** @deprecated Use `media` for the mixed image + video list. */
   galleryUrls: string[];
   /** Structured media list — includes videos and per-item metadata. */
-  media: MarketplaceMedia[];
+  media?: MarketplaceMedia[];
   units: MarketplaceProductUnit[];
   isFeatured: boolean;
   keywords?: string[];
