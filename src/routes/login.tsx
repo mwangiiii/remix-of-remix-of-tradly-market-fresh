@@ -12,7 +12,11 @@ export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
       { title: "Sign in — Tradly Market" },
+      { name: "description", content: "Sign in to Tradly Market to place orders and track deliveries." },
       { name: "robots", content: "noindex" },
+      { property: "og:title", content: "Sign in — Tradly Market" },
+      { property: "og:description", content: "Sign in to your Tradly Market buyer account." },
+      { property: "og:url", content: "https://market.tradly.co.ke/login" },
     ],
   }),
   validateSearch: searchSchema,

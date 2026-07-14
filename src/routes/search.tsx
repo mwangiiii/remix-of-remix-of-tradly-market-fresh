@@ -13,7 +13,16 @@ const searchSchema = z.object({ q: z.string().optional() });
 
 export const Route = createFileRoute("/search")({
   validateSearch: searchSchema,
-  head: () => ({ meta: [{ title: "Search — Tradly Market" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({
+    meta: [
+      { title: "Search — Tradly Market" },
+      { name: "description", content: "Search Tradly Market for fresh produce, dairy, rice and pantry staples." },
+      { name: "robots", content: "noindex" },
+      { property: "og:title", content: "Search — Tradly Market" },
+      { property: "og:description", content: "Find fresh produce and pantry essentials on Tradly Market." },
+      { property: "og:url", content: "https://market.tradly.co.ke/search" },
+    ],
+  }),
   component: SearchPage,
 });
 

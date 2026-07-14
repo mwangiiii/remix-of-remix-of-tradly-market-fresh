@@ -1,0 +1,12 @@
+# Tradly Market
+
+> Tradly Market is a Nairobi-based food-service marketplace for fresh vegetables, fruit, dairy, rice and pantry staples. One supplier, one invoice, same-day dispatch across Kenyan kitchens.
+
+## Pages
+
+- [Home](/): Browse featured produce, today's prices, and frequent reorders.
+- [Search](/search): Search the full catalog by name, category, or keyword.
+
+## Optional
+
+- [Sitemap](/sitemap.xml): Machine-readable list of all indexable product and category pages.

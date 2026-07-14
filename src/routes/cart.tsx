@@ -8,7 +8,16 @@ import { X, BookmarkPlus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/cart")({
-  head: () => ({ meta: [{ title: "Your cart — Tradly Market" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({
+    meta: [
+      { title: "Your cart — Tradly Market" },
+      { name: "description", content: "Review your Tradly Market cart before checkout." },
+      { name: "robots", content: "noindex" },
+      { property: "og:title", content: "Your cart — Tradly Market" },
+      { property: "og:description", content: "Review items in your Tradly Market cart before checkout." },
+      { property: "og:url", content: "https://market.tradly.co.ke/cart" },
+    ],
+  }),
   component: Cart,
 });
 

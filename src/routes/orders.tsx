@@ -12,7 +12,16 @@ import { useNavigate } from "@tanstack/react-router";
 import { RotateCw } from "lucide-react";
 
 export const Route = createFileRoute("/orders")({
-  head: () => ({ meta: [{ title: "Your orders — Tradly Market" }, { name: "robots", content: "noindex" }] }),
+  head: () => ({
+    meta: [
+      { title: "Your orders — Tradly Market" },
+      { name: "description", content: "Track your Tradly Market orders from approval through delivery and invoicing." },
+      { name: "robots", content: "noindex" },
+      { property: "og:title", content: "Your orders — Tradly Market" },
+      { property: "og:description", content: "Track and reorder from your Tradly Market order history." },
+      { property: "og:url", content: "https://market.tradly.co.ke/orders" },
+    ],
+  }),
   component: Orders,
 });
 
