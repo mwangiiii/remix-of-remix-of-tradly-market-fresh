@@ -5,25 +5,73 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { SearchBar } from "../marketplace/components/SearchBar";
-import { getProductsByCategory } from "../marketplace/api/marketplaceApi";
-import { categories } from "../marketplace/mockData/categories";
+import {
+  getCategories,
+  getProductsByCategory,
+} from "../marketplace/api/marketplaceApi";
+import {
+  siteUrl,
+  jsonLd,
+  categoryItemListLd,
+  breadcrumbLd,
+  SITE_NAME,
+} from "../marketplace/lib/seo";
+import type { MarketplaceCategory, MarketplaceProduct } from "../marketplace/types/marketplace";
 
 export const Route = createFileRoute("/category/$slug")({
-  head: ({ params }) => {
-    const cat = categories.find((c) => c.slug === params.slug);
-    const title = cat ? `${cat.name} — Tradly Market` : "Category — Tradly Market";
+  head: ({ loaderData, params }) => {
+    const cat = (loaderData as { category?: MarketplaceCategory } | undefined)?.category;
+    const canonical = { rel: "canonical" as const, href: siteUrl(`/category/${params.slug}`) };
+    if (!cat) {
+      return {
+        meta: [{ title: `Category — ${SITE_NAME}` }, { name: "robots", content: "noindex" }],
+        links: [canonical],
+        scripts: [],
+      };
+    }
+    const title = `${cat.name} — ${SITE_NAME}`;
+    const description = `Shop fresh ${cat.name.toLowerCase()} from Tradly. Delivered same-day, one invoice, eTIMS-ready.`;
     return {
       meta: [
         { title },
-        { name: "description", content: `Shop fresh ${cat?.name.toLowerCase() ?? "produce"} from Tradly. Delivered same-day, one invoice.` },
+        { name: "description", content: description },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: siteUrl(`/category/${cat.slug}`) },
         { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+      ],
+      links: [canonical],
+      scripts: [
+        // categoryItemListLd needs the products list; loader also returns it
+        // so JSON-LD can be rendered from real DB rows (not mock).
+        jsonLd(
+          categoryItemListLd(
+            cat,
+            (loaderData as { products?: MarketplaceProduct[] } | undefined)?.products ?? [],
+          ),
+        ),
+        jsonLd(
+          breadcrumbLd([
+            { name: "Home", path: "/" },
+            { name: cat.name, path: `/category/${cat.slug}` },
+          ]),
+        ),
       ],
     };
   },
-  loader: ({ params }) => {
-    const cat = categories.find((c) => c.slug === params.slug);
-    if (!cat) throw notFound();
-    return { category: cat };
+  loader: async ({ params }) => {
+    // Fetch categories + products for this slug in parallel from the DB.
+    // The category has to come from a query since there's no direct-by-slug
+    // helper yet — filter client-side over the ordered list (small N).
+    const [cats, products] = await Promise.all([
+      getCategories(),
+      getProductsByCategory(params.slug),
+    ]);
+    const category = cats.find((c) => c.slug === params.slug);
+    if (!category) throw notFound();
+    return { category, products };
   },
   component: CategoryView,
   notFoundComponent: () => (
@@ -37,10 +85,14 @@ export const Route = createFileRoute("/category/$slug")({
 });
 
 function CategoryView() {
-  const { category } = Route.useLoaderData();
-  const { data: products = [] } = useQuery({
+  const { category, products: initial } = Route.useLoaderData() as {
+    category: MarketplaceCategory;
+    products: MarketplaceProduct[];
+  };
+  const { data: products = initial } = useQuery({
     queryKey: ["category", category.slug],
     queryFn: () => getProductsByCategory(category.slug),
+    initialData: initial,
   });
 
   return (

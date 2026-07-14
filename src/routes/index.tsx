@@ -49,11 +49,11 @@ function Home() {
           <h1 className="mt-3 max-w-3xl text-[52px] font-semibold leading-[1.05] tracking-tight text-ink">
             Fresh produce.
             <br />
-            <span className="text-ink-muted">One supplier. One invoice.</span>
+            <span className="text-ink-muted">Single source. Single invoice.</span>
           </h1>
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-ink-muted">
-            Vegetables, fruit, rice and cooking essentials — sourced by Tradly and delivered
-            same day to Kenyan kitchens.
+            Vegetables, fruit, rice and pantry staples, curated by Tradly and delivered
+            same day across Kenyan kitchens.
           </p>
         </section>
 

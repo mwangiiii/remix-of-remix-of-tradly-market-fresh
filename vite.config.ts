@@ -15,4 +15,7 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Both this app and tradly-super-admin default to 8080; pin market to 8081
+  // so they can run side-by-side during dev without a port collision.
+  vite: { server: { port: 8081 } },
 });

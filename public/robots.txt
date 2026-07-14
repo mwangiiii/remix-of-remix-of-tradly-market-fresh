@@ -4,6 +4,11 @@ Disallow: /cart
 Disallow: /checkout
 Disallow: /account
 Disallow: /orders
+Disallow: /order/
 Disallow: /login
 Disallow: /notifications
 Disallow: /lists
+Disallow: /admin
+Disallow: /search
+
+Sitemap: https://market.tradly.co.ke/sitemap.xml

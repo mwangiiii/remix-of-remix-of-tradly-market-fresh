@@ -8,6 +8,10 @@ import { TopNav } from "./TopNav";
  *  - Desktop (≥ lg): wide layout with a top nav, no bottom bar, generous gutters.
  * `variant="storefront"` renders the wide desktop grid — best for landing / listings.
  * `variant="focused"` keeps a centred, narrower column — best for cart / checkout / detail.
+ *
+ * Pass `hideNav` on any screen that renders its own fixed bottom action bar
+ * (checkout, wizards, etc.) — otherwise BottomNav's fixed bottom-0 tab bar
+ * paints on the same edge as that bar on mobile and covers it.
  */
 export function AppShell({
   children,

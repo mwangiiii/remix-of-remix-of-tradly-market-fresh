@@ -7,8 +7,7 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { SearchBar } from "../marketplace/components/SearchBar";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
-import { searchProducts } from "../marketplace/api/marketplaceApi";
-import { categories } from "../marketplace/mockData/categories";
+import { getCategories, searchProducts } from "../marketplace/api/marketplaceApi";
 
 const searchSchema = z.object({ q: z.string().optional() });
 
@@ -29,6 +28,11 @@ function SearchPage() {
     queryKey: ["search", q],
     queryFn: () => searchProducts(q),
     enabled: q.trim().length > 0,
+  });
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ["categories"],
+    queryFn: getCategories,
   });
 
   let results = data;

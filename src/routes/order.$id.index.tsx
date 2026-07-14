@@ -137,6 +137,8 @@ function OrderDetail() {
           </ol>
         </section>
 
+        <DocumentsSection order={order} />
+
         {/* Line items */}
         <section className="mt-5 rounded-2xl border border-divider bg-surface p-5">
           <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Items</p>
@@ -176,5 +178,88 @@ function Meta({ label, value, accent }: { label: string; value: string; accent?:
       <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
       <p className={`mt-1 text-[14px] font-semibold ${accent ? "text-trust" : "text-ink"}`}>{value}</p>
     </div>
+  );
+}
+
+/**
+ * Rendered only when at least one downstream document exists.
+ * PO / GRN / invoice / payment status are surfaced from the enriched-status
+ * view; nothing shows for a fresh pending_approval order.
+ */
+function DocumentsSection({ order }: { order: MarketplaceOrder }) {
+  const rows: { icon: typeof FileText; label: string; value: string; sub?: string }[] = [];
+  if (order.poNumber) {
+    rows.push({
+      icon: FileText,
+      label: "Purchase order",
+      value: order.poNumber,
+    });
+  }
+  if (order.grnNumber) {
+    rows.push({
+      icon: PackageCheck,
+      label: "Goods received (GRN)",
+      value: order.grnNumber,
+      sub: order.grnDeliveryDate
+        ? `Delivered ${format(new Date(order.grnDeliveryDate), "d MMM yyyy")}`
+        : undefined,
+    });
+  }
+  if (order.invoiceNumber) {
+    rows.push({
+      icon: ReceiptText,
+      label: "Invoice",
+      value: order.invoiceNumber,
+      sub:
+        order.invoiceTotalKes != null
+          ? `${formatKes(order.invoiceTotalKes)}${
+              order.invoiceStatus ? ` · ${order.invoiceStatus.replace(/_/g, " ")}` : ""
+            }`
+          : order.invoiceStatus ?? undefined,
+    });
+  }
+  if (order.invoicePaymentStatus) {
+    const paid = order.amountPaidKes ?? 0;
+    const total = order.invoiceTotalKes ?? order.totalKes;
+    rows.push({
+      icon: CircleDollarSign,
+      label: "Payment",
+      value: order.invoicePaymentStatus.replace(/_/g, " "),
+      sub:
+        paid > 0
+          ? `${formatKes(paid)} of ${formatKes(total)}`
+          : undefined,
+    });
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <section className="mt-5 rounded-2xl border border-divider bg-surface p-5">
+      <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
+        Documents
+      </p>
+      <ul className="mt-3 divide-y divide-divider">
+        {rows.map((row) => {
+          const Icon = row.icon;
+          return (
+            <li key={row.label} className="flex items-center gap-3 py-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-trust/10 text-trust">
+                <Icon className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  {row.label}
+                </p>
+                <p className="mt-0.5 text-[14px] font-semibold text-ink">{row.value}</p>
+              </div>
+              {row.sub && (
+                <p className="text-right text-[12px] text-ink-muted">{row.sub}</p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

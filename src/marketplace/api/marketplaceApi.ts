@@ -1,14 +1,19 @@
 // Marketplace API surface.
 //
-// Reads (catalog + orders)  — LIVE Supabase (public.marketplace_* + public.purchase_*).
-// Writes (submit order)     — LIVE Edge Function `marketplace-submit-order`.
-// Saved lists + notifications — still in-memory stubs; Phase 6 wires those.
+// Catalog reads + orders + notifications  — LIVE Supabase.
+// Submit order                             — LIVE Edge Function.
+// Branches                                 — LIVE REST API (/branches),
+//                                            same endpoint the settings app
+//                                            uses — branch visibility isn't
+//                                            reliably exposed via direct
+//                                            client-side Supabase RLS reads.
+// Saved lists                              — returns empty until a real
+//                                            marketplace_saved_lists table
+//                                            is provisioned. NO mock data.
 
 import { getSupabase } from "@/lib/supabase";
-import { apiPost } from "@/services/api";
-import { searchSynonyms } from "../mockData/products";
-import { savedLists as seedLists } from "../mockData/savedLists";
-import { notifications as seedNotifications } from "../mockData/orders";
+import { apiGet, apiPost } from "@/services/api";
+import { SEARCH_SYNONYMS } from "../config/searchSynonyms";
 import type {
   CartLine,
   MarketplaceCategory,
@@ -40,6 +45,19 @@ type UnitRow = {
   price_kes: number | string;
   availability: MarketplaceProductUnit["availability"];
   display_order: number;
+  moq: number | string | null;
+  case_pack_size: number | string | null;
+};
+
+type MediaRow = {
+  id: string;
+  url: string;
+  kind: "image" | "video";
+  mime_type: string | null;
+  alt_text: string | null;
+  poster_url: string | null;
+  display_order: number;
+  is_thumbnail: boolean;
 };
 
 type ProductRow = {
@@ -53,7 +71,18 @@ type ProductRow = {
   gallery_urls: string[] | null;
   keywords: string[] | null;
   is_featured: boolean;
+  tax_ty_cd: string | null;
+  item_cls_cd: string | null;
+  item_cd: string | null;
+  is_taxable: boolean | null;
+  kra_registered: boolean | null;
+  country_of_origin: string | null;
+  storage_class: string | null;
+  shelf_life_days: number | null;
+  lead_time_days: number | null;
+  order_cutoff_time: string | null;
   marketplace_product_units: UnitRow[] | null;
+  marketplace_product_media: MediaRow[] | null;
 };
 
 const num = (v: number | string): number =>
@@ -77,12 +106,36 @@ function mapUnit(row: UnitRow): MarketplaceProductUnit {
     isDefault: row.is_default,
     priceKes: num(row.price_kes),
     availability: row.availability,
+    moq: row.moq == null ? null : num(row.moq),
+    casePackSize: row.case_pack_size == null ? null : num(row.case_pack_size),
   };
 }
 
 function mapProduct(row: ProductRow): MarketplaceProduct {
-  const gallery = row.gallery_urls ?? [];
-  const thumb = row.thumbnail_url ?? gallery[0] ?? "";
+  const galleryLegacy = row.gallery_urls ?? [];
+  const media = (row.marketplace_product_media ?? [])
+    .slice()
+    .sort((a, b) => a.display_order - b.display_order)
+    .map((m) => ({
+      id: m.id,
+      url: m.url,
+      kind: m.kind,
+      mimeType: m.mime_type,
+      altText: m.alt_text,
+      posterUrl: m.poster_url,
+      displayOrder: m.display_order,
+      isThumbnail: m.is_thumbnail,
+    }));
+  const thumb =
+    row.thumbnail_url ??
+    media.find((m) => m.isThumbnail && m.kind === "image")?.url ??
+    media.find((m) => m.kind === "image")?.url ??
+    galleryLegacy[0] ??
+    "";
+  const derivedGallery =
+    media.length > 0
+      ? media.filter((m) => m.kind === "image").map((m) => m.url)
+      : galleryLegacy;
   const units = (row.marketplace_product_units ?? [])
     .slice()
     .sort((a, b) => a.display_order - b.display_order)
@@ -95,18 +148,35 @@ function mapProduct(row: ProductRow): MarketplaceProduct {
     description: row.description,
     origin: row.origin ?? undefined,
     thumbnailUrl: thumb,
-    galleryUrls: gallery.length > 0 ? gallery : thumb ? [thumb] : [],
+    galleryUrls: derivedGallery.length > 0 ? derivedGallery : thumb ? [thumb] : [],
+    media,
     units,
     isFeatured: row.is_featured,
     keywords: row.keywords ?? undefined,
+    taxTyCd: (row.tax_ty_cd as MarketplaceProduct["taxTyCd"]) ?? null,
+    itemClsCd: row.item_cls_cd,
+    itemCd: row.item_cd,
+    isTaxable: row.is_taxable ?? undefined,
+    kraRegistered: row.kra_registered ?? undefined,
+    countryOfOrigin: row.country_of_origin,
+    storageClass: (row.storage_class as MarketplaceProduct["storageClass"]) ?? null,
+    shelfLifeDays: row.shelf_life_days,
+    leadTimeDays: row.lead_time_days,
+    orderCutoffTime: row.order_cutoff_time,
   };
 }
 
 const PRODUCT_SELECT = `
   id, category_id, name, slug, description, origin,
   thumbnail_url, gallery_urls, keywords, is_featured,
+  tax_ty_cd, item_cls_cd, item_cd, is_taxable, kra_registered,
+  country_of_origin, storage_class, shelf_life_days, lead_time_days, order_cutoff_time,
   marketplace_product_units (
-    id, unit_label, unit_qty, is_default, price_kes, availability, display_order
+    id, unit_label, unit_qty, is_default, price_kes, availability, display_order,
+    moq, case_pack_size
+  ),
+  marketplace_product_media (
+    id, url, kind, mime_type, alt_text, poster_url, display_order, is_thumbnail
   )
 `;
 
@@ -170,7 +240,7 @@ export async function searchProducts(
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const expanded = new Set<string>([q]);
-  for (const [k, syns] of Object.entries(searchSynonyms)) {
+  for (const [k, syns] of Object.entries(SEARCH_SYNONYMS)) {
     if (q.includes(k)) syns.forEach((s) => expanded.add(s));
     if (syns.some((s) => s.includes(q))) expanded.add(k);
   }
@@ -197,18 +267,21 @@ export async function searchProducts(
 // ─────────────────────────────────────────────────────────────────────
 
 /**
- * Map flow's PR status to the buyer-facing OrderStatus enum. Statuses beyond
- * po_generated (delivered / invoiced / paid) require joining the PO / GRN /
- * invoice tables and land in Phase 6.
+ * Buyer-facing OrderStatus enum. Values >= po_generated in the pipeline come
+ * from the vw_marketplace_order_status view, which walks PR → PO → GRN →
+ * invoice → payment and collapses to a single unified_status.
  */
-function mapPrStatus(prStatus: string): OrderStatus {
-  switch (prStatus) {
+function toOrderStatus(unified: string | null | undefined): OrderStatus {
+  switch (unified) {
     case "draft":            return "draft";
     case "pending_approval": return "pending_approval";
     case "approved":         return "approved";
     case "po_generated":     return "po_generated";
+    case "delivered":        return "delivered";
+    case "invoiced":         return "invoiced";
+    case "paid":             return "paid";
     case "cancelled":        return "cancelled";
-    case "rejected":         return "cancelled"; // no dedicated buyer surface
+    case "rejected":         return "cancelled";
     default:                 return "pending_approval";
   }
 }
@@ -230,6 +303,18 @@ type PrLineRow = {
       thumbnail_url: string | null;
     } | null;
   } | null;
+};
+
+type StatusRow = {
+  unified_status: string | null;
+  po_number: string | null;
+  grn_number: string | null;
+  grn_delivery_date: string | null;
+  invoice_number: string | null;
+  invoice_status: string | null;
+  invoice_payment_status: string | null;
+  invoice_total_kes: number | string | null;
+  amount_paid_kes: number | string | null;
 };
 
 type PrRow = {
@@ -257,16 +342,24 @@ function mapLine(r: PrLineRow): CartLine {
   };
 }
 
-function mapOrder(r: PrRow): MarketplaceOrder {
+function mapOrder(r: PrRow, s?: StatusRow | null): MarketplaceOrder {
   const lines = (r.purchase_request_lines ?? []).map(mapLine);
   return {
     id: r.id,
     requestNumber: r.request_number,
-    status: mapPrStatus(r.status),
+    status: toOrderStatus(s?.unified_status ?? r.status),
     lines,
-    totalKes: num(r.estimated_total_kes ?? lines.reduce((s, l) => s + l.priceKes * l.quantity, 0)),
+    totalKes: num(r.estimated_total_kes ?? lines.reduce((s2, l) => s2 + l.priceKes * l.quantity, 0)),
     submittedAt: r.created_at,
     expectedDeliveryDate: r.expected_delivery_date ?? "",
+    poNumber: s?.po_number ?? null,
+    grnNumber: s?.grn_number ?? null,
+    grnDeliveryDate: s?.grn_delivery_date ?? null,
+    invoiceNumber: s?.invoice_number ?? null,
+    invoiceStatus: s?.invoice_status ?? null,
+    invoicePaymentStatus: s?.invoice_payment_status ?? null,
+    invoiceTotalKes: s?.invoice_total_kes == null ? null : num(s.invoice_total_kes),
+    amountPaidKes: s?.amount_paid_kes == null ? null : num(s.amount_paid_kes),
   };
 }
 
@@ -281,6 +374,30 @@ const ORDER_SELECT = `
   )
 `;
 
+const STATUS_SELECT = `
+  pr_id, unified_status, po_number, grn_number, grn_delivery_date,
+  invoice_number, invoice_status, invoice_payment_status,
+  invoice_total_kes, amount_paid_kes
+`;
+
+/**
+ * Fetch the enriched status rows for a set of PR ids in one round-trip
+ * and index by pr_id. Order-of-magnitude cheaper than N+1 per-row lookups.
+ */
+async function loadStatuses(prIds: string[]): Promise<Record<string, StatusRow>> {
+  if (prIds.length === 0) return {};
+  const { data, error } = await getSupabase()
+    .from("vw_marketplace_order_status")
+    .select(STATUS_SELECT)
+    .in("pr_id", prIds);
+  if (error) throw error;
+  const byId: Record<string, StatusRow> = {};
+  for (const row of data ?? []) {
+    byId[row.pr_id as string] = row as unknown as StatusRow;
+  }
+  return byId;
+}
+
 export async function getOrders(): Promise<MarketplaceOrder[]> {
   const { data, error } = await getSupabase()
     .from("purchase_requests")
@@ -289,17 +406,69 @@ export async function getOrders(): Promise<MarketplaceOrder[]> {
     .order("created_at", { ascending: false })
     .limit(100);
   if (error) throw error;
-  return (data ?? []).map((r) => mapOrder(r as PrRow));
+  const rows = (data ?? []) as unknown as PrRow[];
+  const statuses = await loadStatuses(rows.map((r) => r.id));
+  return rows.map((r) => mapOrder(r, statuses[r.id]));
 }
 
 export async function getOrder(id: string): Promise<MarketplaceOrder | undefined> {
-  const { data, error } = await getSupabase()
-    .from("purchase_requests")
-    .select(ORDER_SELECT)
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw error;
-  return data ? mapOrder(data as PrRow) : undefined;
+  const sb = getSupabase();
+  const [prRes, statusRes] = await Promise.all([
+    sb.from("purchase_requests").select(ORDER_SELECT).eq("id", id).maybeSingle(),
+    sb.from("vw_marketplace_order_status").select(STATUS_SELECT).eq("pr_id", id).maybeSingle(),
+  ]);
+  if (prRes.error) throw prRes.error;
+  if (statusRes.error) throw statusRes.error;
+  return prRes.data
+    ? mapOrder(prRes.data as unknown as PrRow, (statusRes.data ?? null) as unknown as StatusRow | null)
+    : undefined;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Branches (delivery points)
+//   Goes through the /branches REST endpoint — the same one BranchesTab
+//   (settings app) uses — rather than a direct Supabase table read.
+//   Branch visibility depends on more than business_id (role/branch
+//   scoping via user_roles.branch_id), so it isn't safely exposed as a
+//   plain RLS-scoped client read the way `businesses` is.
+// ─────────────────────────────────────────────────────────────────────
+
+export interface MarketplaceBranch {
+  id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
+type BranchApiRow = {
+  id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+  is_active: boolean;
+  is_default: boolean;
+};
+
+export async function getBranches(): Promise<MarketplaceBranch[]> {
+  const data = await apiGet<{ branches: BranchApiRow[] }>("/branches", {
+    include_inactive: "false",
+  });
+  return (data.branches ?? [])
+    .filter((b) => b.is_active)
+    .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name))
+    .map((b) => ({
+      id: b.id,
+      name: b.name,
+      address: b.address,
+      city: b.city,
+      phone: b.phone,
+      isDefault: b.is_default,
+      isActive: b.is_active,
+    }));
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -309,7 +478,7 @@ export async function getOrder(id: string): Promise<MarketplaceOrder | undefined
 export async function submitMarketplaceOrder(
   lines: CartLine[],
   expectedDeliveryDate: string,
-  options?: { idempotencyKey?: string; kraPin?: string },
+  options?: { idempotencyKey?: string; kraPin?: string; branchId?: string },
 ): Promise<{ requestNumber: string; id: string }> {
   const payload = {
     lines: lines.map((l) => ({
@@ -319,6 +488,7 @@ export async function submitMarketplaceOrder(
     expected_delivery_date: expectedDeliveryDate,
     idempotency_key: options?.idempotencyKey,
     kra_pin: options?.kraPin,
+    branch_id: options?.branchId,
   };
   const data = await apiPost<{ pr_id: string; request_number: string }>(
     "/marketplace-submit-order",
@@ -328,36 +498,107 @@ export async function submitMarketplaceOrder(
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Still-stubbed surfaces (Phase 6 replaces these)
+// Buyer's business (for the /account page)
+//   businesses.RLS is `id = current_business_id()` (from the JWT claim),
+//   so any authenticated buyer gets back a single row — their own.
 // ─────────────────────────────────────────────────────────────────────
 
-const delay = (ms = 120) => new Promise((r) => setTimeout(r, ms));
+export interface BuyerBusiness {
+  id: string;
+  name: string;
+  kraPin: string | null;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  address: string | null;
+  industry: string | null;
+  logoUrl: string | null;
+}
 
-const listStore: SavedList[] = seedLists.map((l) => ({ ...l, items: [...l.items] }));
+export async function getMyBusiness(): Promise<BuyerBusiness | null> {
+  const { data, error } = await getSupabase()
+    .from("businesses")
+    .select("id, name, kra_pin, email, phone, city, address, industry, logo_url")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    name: (data.name as string) ?? "",
+    kraPin: (data.kra_pin as string) ?? null,
+    email: (data.email as string) ?? null,
+    phone: (data.phone as string) ?? null,
+    city: (data.city as string) ?? null,
+    address: (data.address as string) ?? null,
+    industry: (data.industry as string) ?? null,
+    logoUrl: (data.logo_url as string) ?? null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Buyer surfaces that don't have a DB table yet
+// ─────────────────────────────────────────────────────────────────────
 
 export async function updateOrderStatus(
   _id: string,
   _next: OrderStatus,
 ): Promise<MarketplaceOrder | undefined> {
-  // Admin-order status transitions live in tradly-flow proper (approve, GRN,
-  // cancel). The market app is buyer-facing and should not mutate PR state
-  // directly. Kept as a no-op so admin.orders.tsx keeps compiling until
-  // Phase 6 rewires that surface.
-  await delay(60);
+  // Buyer surface never mutates PR state — admin ops live in tradly-flow.
+  // Kept as a no-op so admin.orders.tsx keeps compiling.
   return undefined;
 }
 
+// Saved lists have no backing table yet. Return empty so the storefront
+// renders a proper "no saved lists" empty state — NO mock rows.
 export async function getSavedLists(): Promise<SavedList[]> {
-  await delay();
-  return listStore;
+  return [];
 }
 
-export async function getSavedList(id: string): Promise<SavedList | undefined> {
-  await delay();
-  return listStore.find((l) => l.id === id);
+export async function getSavedList(_id: string): Promise<SavedList | undefined> {
+  return undefined;
+}
+
+/**
+ * Buyer notifications, sourced from public.tradly_inbox. RLS scopes to the
+ * buyer's business_id, so this is safe to call from any signed-in surface.
+ * Anonymous callers get an empty list (RLS filters everything out).
+ *
+ * The `request_number` field on NotificationItem is populated whenever the
+ * inbox row references a purchase_request or purchase_order — the UI shows
+ * "PR-042" / "PO-042" chips inline.
+ */
+type InboxRow = {
+  id: string;
+  subject: string | null;
+  body: string;
+  created_at: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Record<string, unknown> | null;
+};
+
+function inboxReference(row: InboxRow): string | undefined {
+  const meta = row.metadata ?? {};
+  const rn = (meta["request_number"] ?? meta["po_number"] ?? meta["grn_number"] ??
+              meta["invoice_number"] ?? meta["payment_number"]) as string | undefined;
+  return rn ?? undefined;
 }
 
 export async function getNotifications(): Promise<NotificationItem[]> {
-  await delay();
-  return [...seedNotifications].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  const { data, error } = await getSupabase()
+    .from("tradly_inbox")
+    .select("id, subject, body, created_at, entity_type, entity_id, metadata")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const row = r as unknown as InboxRow;
+    return {
+      id: row.id,
+      title: row.subject ?? "Update",
+      body: row.body,
+      timestamp: row.created_at,
+      requestNumber: inboxReference(row),
+    };
+  });
 }

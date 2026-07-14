@@ -1,12 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
 import { useCartStore, cartSubtotal, cartCount } from "../marketplace/store/cartStore";
-import { useSessionStore, seedProfile } from "../marketplace/store/sessionStore";
-import { submitMarketplaceOrder } from "../marketplace/api/marketplaceApi";
+import { submitMarketplaceOrder, getBranches } from "../marketplace/api/marketplaceApi";
 import { formatKes } from "../marketplace/lib/format";
-import { ChevronDown, ChevronUp, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, ShieldCheck, Loader2, Building2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -15,20 +15,26 @@ export const Route = createFileRoute("/checkout")({
   component: Checkout,
 });
 
+function useActiveBranches() {
+  return useQuery({
+    queryKey: ["marketplace-branches"],
+    staleTime: 30_000,
+    queryFn: getBranches,
+  });
+}
+
 function Checkout() {
   const navigate = useNavigate();
   const lines = useCartStore((s) => s.lines);
   const clear = useCartStore((s) => s.clear);
   const { isAuthenticated, isInitializing } = useAuth();
 
-  // Buyer-profile display data still comes from the legacy sessionStore until
-  // Phase 4 wires it to the real businesses / addresses tables.
-  const profileState = useSessionStore((s) => s.profile);
-  const profile = profileState ?? seedProfile;
+  const { data: branches = [], isLoading: branchesLoading } = useActiveBranches();
 
-  const [addressId, setAddressId] = useState(profile.addresses[0].id);
+  const [addressId, setAddressId] = useState<string | null>(null);
   const [date, setDate] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() + 2);
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
     return d.toISOString().slice(0, 10);
   });
   const [showSummary, setShowSummary] = useState(false);
@@ -40,6 +46,15 @@ function Checkout() {
   const subtotal = cartSubtotal(lines);
   const count = cartCount(lines);
 
+  // Default to the business's default branch once branches load, falling
+  // back to the first active branch if none is flagged default.
+  useEffect(() => {
+    if (!addressId && branches.length > 0) {
+      const def = branches.find((b) => b.isDefault) ?? branches[0];
+      setAddressId(def.id);
+    }
+  }, [branches, addressId]);
+
   // Checkout requires a real buyer session. Anonymous browsers get pushed to
   // /login with a `next` param so they land back here after signing in.
   useEffect(() => {
@@ -50,7 +65,7 @@ function Checkout() {
 
   if (isInitializing || !isAuthenticated) {
     return (
-      <AppShell>
+      <AppShell hideNav variant="focused">
         <div className="px-4">
           <TrustHeader title="Checkout" back="/cart" />
           <p className="py-16 text-center text-sm text-ink-muted">Checking your session…</p>
@@ -61,7 +76,7 @@ function Checkout() {
 
   if (lines.length === 0) {
     return (
-      <AppShell>
+      <AppShell hideNav variant="focused">
         <div className="px-4">
           <TrustHeader title="Checkout" back="/cart" />
           <p className="py-16 text-center text-sm text-ink-muted">Your cart is empty.</p>
@@ -71,10 +86,15 @@ function Checkout() {
   }
 
   const submit = async () => {
+    if (!addressId) {
+      toast.error("Choose a delivery branch first.");
+      return;
+    }
     setSubmitting(true);
     try {
       const { id, requestNumber } = await submitMarketplaceOrder(lines, date, {
         idempotencyKey,
+        branchId: addressId,
       });
       clear();
       toast.success(`Order ${requestNumber} submitted`);
@@ -89,39 +109,62 @@ function Checkout() {
   };
 
   return (
-    <AppShell>
+    <AppShell hideNav variant="focused">
       <div className="px-4 pb-32">
         <TrustHeader title="Submit Purchase Order" back="/cart" />
 
         <section className="mt-5">
           <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-muted">Deliver to</h2>
-          <div className="space-y-2">
-            {profile.addresses.map((a) => (
-              <label
-                key={a.id}
-                className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors ${
-                  addressId === a.id ? "border-trust bg-trust/5" : "border-divider bg-surface"
-                }`}
-              >
-                <input
-                  type="radio" name="addr" checked={addressId === a.id}
-                  onChange={() => setAddressId(a.id)}
-                  className="mt-1 accent-[color:var(--trust)]"
-                />
-                <div className="min-w-0">
-                  <p className="text-[14px] font-semibold text-ink">{a.label}</p>
-                  <p className="text-[12px] text-ink-muted">{a.line}</p>
-                </div>
-              </label>
-            ))}
-          </div>
-          <button type="button" className="mt-2 text-[13px] font-medium text-trust">+ Add address</button>
+
+          {branchesLoading && (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-ink-muted" />
+            </div>
+          )}
+
+          {!branchesLoading && branches.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-divider py-8 text-center">
+              <Building2 className="mx-auto h-5 w-5 text-ink-muted mb-2" />
+              <p className="text-[13px] text-ink-muted">No branches set up yet. Add one in Settings.</p>
+            </div>
+          )}
+
+          {!branchesLoading && branches.length > 0 && (
+            <div className="space-y-2">
+              {branches.map((b) => (
+                <label
+                  key={b.id}
+                  className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors ${
+                    addressId === b.id ? "border-trust bg-trust/5" : "border-divider bg-surface"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="addr"
+                    checked={addressId === b.id}
+                    onChange={() => setAddressId(b.id)}
+                    className="mt-1 accent-[color:var(--trust)]"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-semibold text-ink">
+                      {b.name}
+                      {b.isDefault && <span className="ml-1.5 text-[11px] font-normal text-trust">· Default</span>}
+                    </p>
+                    <p className="text-[12px] text-ink-muted">
+                      {[b.address, b.city].filter(Boolean).join(", ") || "No address on file"}
+                    </p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="mt-5">
           <h2 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-ink-muted">Expected delivery</h2>
           <input
-            type="date" value={date}
+            type="date"
+            value={date}
             min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
             onChange={(e) => setDate(e.target.value)}
             className="w-full rounded-2xl border border-divider bg-surface px-4 py-3 text-[14px] text-ink focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20"
@@ -170,7 +213,7 @@ function Checkout() {
           <button
             type="button"
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || !addressId}
             className="w-full rounded-full bg-trust px-5 py-3.5 text-[15px] font-semibold text-trust-foreground shadow-sm transition-colors hover:bg-trust/95 disabled:opacity-60"
           >
             {submitting ? "Submitting…" : `Submit Purchase Order · ${formatKes(subtotal)}`}

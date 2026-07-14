@@ -1,44 +1,117 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { QuantityStepper } from "../marketplace/components/QuantityStepper";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { FullscreenGallery } from "../marketplace/components/FullscreenGallery";
-import { getProduct, getAllProducts } from "../marketplace/api/marketplaceApi";
-import { products as productSeed } from "../marketplace/mockData/products";
+import { getCategories, getProduct, getAllProducts } from "../marketplace/api/marketplaceApi";
+import type { MarketplaceCategory, MarketplaceProduct } from "../marketplace/types/marketplace";
 import { useCartStore } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
-import { MapPin, ShieldCheck, Maximize2 } from "lucide-react";
+import {
+  siteUrl,
+  jsonLd,
+  productLd,
+  breadcrumbLd,
+  SITE_NAME,
+} from "../marketplace/lib/seo";
+import {
+  MapPin, ShieldCheck, Maximize2,
+  Snowflake, Package, Clock, Thermometer, Globe2, ReceiptText, Boxes,
+} from "lucide-react";
+
+/** Small dictionary of the country codes we're likely to see. Fallback is the raw code. */
+const COUNTRY_LABEL: Record<string, string> = {
+  KE: "Kenya", UG: "Uganda", TZ: "Tanzania", RW: "Rwanda", ET: "Ethiopia",
+  ZA: "South Africa", EG: "Egypt", IN: "India", CN: "China", NL: "Netherlands",
+  US: "United States", GB: "United Kingdom", AE: "United Arab Emirates",
+};
+
+const STORAGE_LABEL: Record<string, string> = {
+  ambient: "Ambient",
+  chilled: "Chilled",
+  frozen:  "Frozen",
+  dry:     "Dry storage",
+};
+
+const TAX_LABEL: Record<string, string> = {
+  A: "Zero-rated (KRA A)",
+  B: "16% VAT (KRA B)",
+  C: "Exempt (KRA C)",
+  E: "8% VAT (KRA E)",
+};
 
 export const Route = createFileRoute("/product/$slug")({
-  head: ({ params }) => {
-    const p = productSeed.find((x) => x.slug === params.slug);
-    if (!p) return { meta: [{ title: "Product — Tradly Market" }] };
-    const price = p.units.find((u) => u.isDefault)?.priceKes ?? p.units[0].priceKes;
+  head: ({ loaderData, params }) => {
+    const data = loaderData as
+      | { product?: MarketplaceProduct; category?: MarketplaceCategory }
+      | undefined;
+    const p = data?.product;
+    const canonical = { rel: "canonical" as const, href: siteUrl(`/product/${params.slug}`) };
+    if (!p) {
+      return {
+        meta: [{ title: `Product — ${SITE_NAME}` }, { name: "robots", content: "noindex" }],
+        links: [canonical],
+        scripts: [],
+      };
+    }
+    const price = p.units.find((u) => u.isDefault)?.priceKes ?? p.units[0]?.priceKes ?? 0;
+    const title = `${p.name} — ${SITE_NAME}`;
+    const ogTitle = `${p.name} — ${formatKes(price)}`;
+    const category = data?.category;
     return {
       meta: [
-        { title: `${p.name} — Tradly Market` },
-        { name: "description", content: `${p.name} from Tradly. ${p.origin ? `From ${p.origin}. ` : ""}Order for same-day dispatch.` },
-        { property: "og:title", content: `${p.name} — ${formatKes(price)}` },
+        { title },
+        { name: "description", content: p.description },
+        { property: "og:type", content: "product" },
+        { property: "og:url", content: siteUrl(`/product/${p.slug}`) },
+        { property: "og:title", content: ogTitle },
         { property: "og:description", content: p.description },
         { property: "og:image", content: p.thumbnailUrl },
+        { property: "og:image:alt", content: p.name },
+        { property: "product:price:amount", content: price.toString() },
+        { property: "product:price:currency", content: "KES" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: ogTitle },
+        { name: "twitter:description", content: p.description },
         { name: "twitter:image", content: p.thumbnailUrl },
+      ],
+      links: [canonical],
+      scripts: [
+        jsonLd(productLd(p, category)),
+        jsonLd(
+          breadcrumbLd([
+            { name: "Home", path: "/" },
+            ...(category ? [{ name: category.name, path: `/category/${category.slug}` }] : []),
+            { name: p.name, path: `/product/${p.slug}` },
+          ]),
+        ),
       ],
     };
   },
   loader: async ({ params }) => {
-    const p = await getProduct(params.slug);
-    if (!p) throw notFound();
-    return { product: p };
+    // Fetch product + all categories in parallel; look up the specific
+    // category client-side so the head has real data (not mocks) for OG /
+    // JSON-LD breadcrumb.
+    const [product, categories] = await Promise.all([
+      getProduct(params.slug),
+      getCategories(),
+    ]);
+    if (!product) throw notFound();
+    const category = categories.find((c) => c.id === product.categoryId);
+    return { product, category };
   },
   component: ProductDetail,
 });
 
 function ProductDetail() {
-  const { product: initial } = Route.useLoaderData() as { product: import("../marketplace/types/marketplace").MarketplaceProduct };
+  const { product: initial } = Route.useLoaderData() as {
+    product: MarketplaceProduct;
+    category?: MarketplaceCategory;
+  };
   const { data: fresh } = useQuery({
     queryKey: ["product", initial.slug],
     queryFn: () => getProduct(initial.slug),
@@ -58,7 +131,28 @@ function ProductDetail() {
 
   const unit = product.units.find((u) => u.id === selectedUnitId) ?? product.units[0];
   const outOfStock = unit.availability === "out_of_stock";
-  const galleryImages = product.galleryUrls.length > 0 ? product.galleryUrls : [product.thumbnailUrl];
+
+  // When the buyer switches pack (or lands on a unit with an MOQ > 1),
+  // snap the quantity up to the minimum the DB says is orderable.
+  useEffect(() => {
+    if (unit.moq && qty < unit.moq) setQty(unit.moq);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unit.id, unit.moq]);
+  // Structured media (images + videos) is the source of truth when present;
+  // fall back to the legacy image-only gallery_urls for older rows.
+  const galleryItems: import("../marketplace/components/FullscreenGallery").GalleryItem[] =
+    product.media && product.media.length > 0
+      ? product.media.map((m) => ({
+          url: m.url,
+          kind: m.kind,
+          altText: m.altText ?? undefined,
+          posterUrl: m.posterUrl ?? undefined,
+          mimeType: m.mimeType ?? undefined,
+        }))
+      : (product.galleryUrls.length > 0 ? product.galleryUrls : [product.thumbnailUrl]).map(
+          (url) => ({ url, kind: "image" as const }),
+        );
+  const currentItem = galleryItems[galleryIdx] ?? galleryItems[0];
 
   const { data: allProducts = [] } = useQuery({
     queryKey: ["products"],
@@ -98,37 +192,72 @@ function ProductDetail() {
                 type="button"
                 onClick={() => { setZoomOpen(true); }}
                 className="group relative block aspect-square w-full overflow-hidden lg:rounded-3xl"
-                aria-label="Open fullscreen gallery"
+                aria-label={currentItem?.kind === "video" ? "Open fullscreen video" : "Open fullscreen gallery"}
               >
-                <img
-                  src={galleryImages[galleryIdx] ?? product.thumbnailUrl}
-                  alt={product.name}
-                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                />
+                {currentItem?.kind === "video" ? (
+                  <>
+                    <video
+                      key={currentItem.url}
+                      src={currentItem.url}
+                      poster={currentItem.posterUrl ?? product.thumbnailUrl}
+                      preload="metadata"
+                      muted
+                      playsInline
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                    />
+                    <span className="absolute inset-0 grid place-items-center">
+                      <span className="grid h-14 w-14 place-items-center rounded-full bg-black/50 text-white text-2xl backdrop-blur-sm">
+                        ▶
+                      </span>
+                    </span>
+                  </>
+                ) : (
+                  <img
+                    src={currentItem?.url ?? product.thumbnailUrl}
+                    alt={currentItem?.altText ?? product.name}
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                  />
+                )}
                 <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-80 backdrop-blur transition group-hover:opacity-100">
                   <Maximize2 className="h-4 w-4" />
                 </span>
               </button>
-              {galleryImages.length > 1 && (
+              {galleryItems.length > 1 && (
                 <>
                   {/* Desktop thumbnail strip */}
                   <div className="mt-4 hidden gap-2 lg:flex">
-                    {galleryImages.map((src, i) => (
+                    {galleryItems.map((it, i) => (
                       <button
-                        key={`${src}-${i}`}
+                        key={`${it.url}-${i}`}
                         type="button"
                         onClick={() => setGalleryIdx(i)}
-                        className={`h-20 w-20 shrink-0 overflow-hidden rounded-xl transition ${
+                        className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-xl transition ${
                           i === galleryIdx ? "ring-2 ring-ink" : "opacity-70 hover:opacity-100"
                         }`}
                       >
-                        <img src={src} alt="" className="h-full w-full object-cover" />
+                        {it.kind === "video" ? (
+                          <>
+                            <video
+                              src={it.url}
+                              poster={it.posterUrl ?? undefined}
+                              preload="metadata"
+                              muted
+                              playsInline
+                              className="h-full w-full object-cover"
+                            />
+                            <span className="absolute inset-0 grid place-items-center">
+                              <span className="grid h-7 w-7 place-items-center rounded-full bg-black/50 text-[10px] text-white">▶</span>
+                            </span>
+                          </>
+                        ) : (
+                          <img src={it.posterUrl ?? it.url} alt="" className="h-full w-full object-cover" />
+                        )}
                       </button>
                     ))}
                   </div>
                   {/* Mobile dots */}
                   <div className="mt-3 flex justify-center gap-2 lg:hidden">
-                    {galleryImages.map((_, i) => (
+                    {galleryItems.map((_, i) => (
                       <button
                         key={i}
                         type="button"
@@ -136,7 +265,7 @@ function ProductDetail() {
                         className={`h-1.5 rounded-full transition-all ${
                           i === galleryIdx ? "w-6 bg-ink" : "w-1.5 bg-divider"
                         }`}
-                        aria-label={`Show image ${i + 1}`}
+                        aria-label={`Show media ${i + 1}`}
                       />
                     ))}
                   </div>
@@ -203,9 +332,15 @@ function ProductDetail() {
               <span>Sourced by Tradly. One supplier. One invoice. eTIMS-compliant.</span>
             </div>
 
+            <ProductDetailsList product={product} unit={unit} />
+
             {/* Desktop-only add-to-cart bar */}
             <div className="mt-8 hidden items-center gap-3 lg:flex">
-              <QuantityStepper value={qty} onChange={(v) => setQty(Math.max(1, v))} min={1} />
+              <QuantityStepper
+                value={qty}
+                onChange={(v) => setQty(Math.max(unit.moq ?? 1, v))}
+                min={unit.moq ?? 1}
+              />
               <button
                 type="button"
                 onClick={handleAdd}
@@ -237,7 +372,11 @@ function ProductDetail() {
       {/* Mobile sticky add-to-cart bar */}
       <div className="fixed inset-x-0 bottom-16 z-30 border-t border-divider bg-surface/95 backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
-          <QuantityStepper value={qty} onChange={(v) => setQty(Math.max(1, v))} min={1} />
+          <QuantityStepper
+            value={qty}
+            onChange={(v) => setQty(Math.max(unit.moq ?? 1, v))}
+            min={unit.moq ?? 1}
+          />
           <button
             type="button"
             onClick={handleAdd}
@@ -250,12 +389,118 @@ function ProductDetail() {
       </div>
 
       <FullscreenGallery
-        images={galleryImages}
+        items={galleryItems}
         alt={product.name}
         open={zoomOpen}
         onClose={() => setZoomOpen(false)}
         initialIndex={galleryIdx}
       />
     </AppShell>
+  );
+}
+
+/**
+ * Product details table — only renders a row for a field the DB actually has.
+ * If none of the optional fields are set, the whole section stays hidden so
+ * the storefront doesn't grow ugly empty rows for older / draft catalog rows.
+ */
+function ProductDetailsList({
+  product,
+  unit,
+}: {
+  product: import("../marketplace/types/marketplace").MarketplaceProduct;
+  unit: import("../marketplace/types/marketplace").MarketplaceProductUnit;
+}) {
+  const rows: { icon: ReactNode; label: string; value: ReactNode }[] = [];
+
+  if (product.countryOfOrigin) {
+    const label =
+      COUNTRY_LABEL[product.countryOfOrigin] ?? product.countryOfOrigin;
+    rows.push({
+      icon: <Globe2 className="h-4 w-4" />,
+      label: "Country of origin",
+      value: label,
+    });
+  }
+  if (product.storageClass) {
+    const cold =
+      product.storageClass === "frozen" || product.storageClass === "chilled";
+    rows.push({
+      icon: cold ? <Snowflake className="h-4 w-4" /> : <Thermometer className="h-4 w-4" />,
+      label: "Storage",
+      value: STORAGE_LABEL[product.storageClass] ?? product.storageClass,
+    });
+  }
+  if (typeof product.shelfLifeDays === "number" && product.shelfLifeDays > 0) {
+    rows.push({
+      icon: <Clock className="h-4 w-4" />,
+      label: "Shelf life",
+      value: `${product.shelfLifeDays} day${product.shelfLifeDays === 1 ? "" : "s"}`,
+    });
+  }
+  if (typeof product.leadTimeDays === "number" && product.leadTimeDays >= 0) {
+    const cutoff = product.orderCutoffTime?.slice(0, 5);
+    rows.push({
+      icon: <Clock className="h-4 w-4" />,
+      label: "Delivery lead time",
+      value:
+        product.leadTimeDays === 0
+          ? "Same-day"
+          : cutoff
+            ? `${product.leadTimeDays} day${product.leadTimeDays === 1 ? "" : "s"} (order by ${cutoff})`
+            : `${product.leadTimeDays} day${product.leadTimeDays === 1 ? "" : "s"}`,
+    });
+  } else if (product.orderCutoffTime) {
+    rows.push({
+      icon: <Clock className="h-4 w-4" />,
+      label: "Order cutoff",
+      value: product.orderCutoffTime.slice(0, 5),
+    });
+  }
+  if (unit.moq && unit.moq > 1) {
+    rows.push({
+      icon: <Package className="h-4 w-4" />,
+      label: "Min. order",
+      value: `${unit.moq} × ${unit.unitLabel}`,
+    });
+  }
+  if (unit.casePackSize && unit.casePackSize > 0) {
+    rows.push({
+      icon: <Boxes className="h-4 w-4" />,
+      label: "Case pack",
+      value: `${unit.casePackSize} × ${unit.unitLabel}`,
+    });
+  }
+  if (product.kraRegistered && product.taxTyCd) {
+    rows.push({
+      icon: <ReceiptText className="h-4 w-4" />,
+      label: "KRA tax",
+      value: TAX_LABEL[product.taxTyCd] ?? product.taxTyCd,
+    });
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <dl className="mt-6 grid grid-cols-1 divide-y divide-divider rounded-2xl border border-divider bg-surface text-[13px] sm:grid-cols-2 sm:divide-y-0">
+      {rows.map((row, i) => (
+        <div
+          key={row.label}
+          className={`flex items-center gap-3 px-4 py-3 ${
+            i % 2 === 0 ? "sm:border-r sm:border-divider" : ""
+          } ${i < rows.length - (rows.length % 2 === 0 ? 2 : 1) ? "sm:border-b sm:border-divider" : ""}`}
+        >
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-trust/10 text-trust">
+            {row.icon}
+          </span>
+          <div className="min-w-0">
+            <dt className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+              {row.label}
+            </dt>
+            <dd className="mt-0.5 text-ink truncate">{row.value}</dd>
+          </div>
+        </div>
+      ))}
+    </dl>
   );
 }

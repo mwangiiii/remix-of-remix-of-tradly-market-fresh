@@ -13,6 +13,15 @@ import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "../contexts/AuthProvider";
+import {
+  SITE_URL,
+  SITE_NAME,
+  SITE_LOCALE,
+  DEFAULT_OG_IMAGE,
+  jsonLd,
+  organizationLd,
+  websiteLd,
+} from "../marketplace/lib/seo";
 
 function NotFoundComponent() {
   return (
@@ -65,28 +74,46 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { title: "Tradly Market" },
-      { name: "description", content: "Order fresh vegetables, fruits, rice, dairy and cooking essentials from Tradly. Same-day dispatch, one supplier, one invoice." },
-      { name: "author", content: "Tradly" },
-      { property: "og:title", content: "Tradly Market — Fresh produce for Kenyan kitchens" },
-      { property: "og:description", content: "Order fresh produce and food-service essentials. Sourced from Tradly — Kenya's single-source supply chain." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Tradly" },
-      { name: "theme-color", content: "#FAFAF8" },
-    ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" },
-    ],
-  }),
+  head: () => {
+    const description =
+      "Order fresh vegetables, fruits, rice, dairy and cooking essentials from Tradly. Same-day dispatch, one supplier, one invoice.";
+    const ogTitle = "Tradly Market — Fresh produce for Kenyan kitchens";
+    const ogDescription =
+      "Order fresh produce and food-service essentials. Sourced from Tradly — Kenya's single-source supply chain.";
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+        { title: SITE_NAME },
+        { name: "description", content: description },
+        { name: "author", content: "Tradly" },
+        { name: "robots", content: "index, follow, max-image-preview:large, max-snippet:-1" },
+        { property: "og:site_name", content: SITE_NAME },
+        { property: "og:locale", content: SITE_LOCALE },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: SITE_URL },
+        { property: "og:title", content: ogTitle },
+        { property: "og:description", content: ogDescription },
+        { property: "og:image", content: DEFAULT_OG_IMAGE },
+        { property: "og:image:alt", content: "Tradly Market — fresh produce for Kenyan kitchens" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:site", content: "@Tradly" },
+        { name: "twitter:title", content: ogTitle },
+        { name: "twitter:description", content: ogDescription },
+        { name: "twitter:image", content: DEFAULT_OG_IMAGE },
+        { name: "theme-color", content: "#FAFAF8" },
+      ],
+      links: [
+        { rel: "stylesheet", href: appCss },
+        { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+        { rel: "canonical", href: SITE_URL },
+        { rel: "preconnect", href: "https://fonts.googleapis.com" },
+        { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+        { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" },
+      ],
+      scripts: [jsonLd(organizationLd()), jsonLd(websiteLd())],
+    };
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -95,7 +122,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en-KE">
       <head><HeadContent /></head>
       <body>
         {children}
