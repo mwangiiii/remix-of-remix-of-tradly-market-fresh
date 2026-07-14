@@ -6,8 +6,16 @@ import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { Wordmark } from "../marketplace/components/BrowseHeader";
 import { getAllProducts, getOrders } from "../marketplace/api/marketplaceApi";
+import { canonicalLink, siteUrl } from "../marketplace/lib/seo";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Tradly Market — Fresh produce for Kenyan kitchens" },
+      { property: "og:url", content: siteUrl("/") },
+    ],
+    links: [canonicalLink("/")],
+  }),
   component: Home,
 });
 
