@@ -1,14 +1,18 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useRouter, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { format } from "date-fns";
 import {
-  ArrowLeft, FileText, PackageCheck, ReceiptText, CircleDollarSign, Check, XCircle, Clock,
+  ArrowLeft, FileText, PackageCheck, ReceiptText, CircleDollarSign, Check, XCircle, Clock, RotateCcw, Ban,
 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { StatusBadge } from "../marketplace/components/StatusBadge";
-import { getOrder } from "../marketplace/api/marketplaceApi";
+import { getOrder, updateOrderStatus } from "../marketplace/api/marketplaceApi";
 import { formatKes } from "../marketplace/lib/format";
+import { useCartStore } from "../marketplace/store/cartStore";
 import type { MarketplaceOrder, OrderStatus } from "../marketplace/types/marketplace";
+
+const CANCELLABLE: OrderStatus[] = ["draft", "pending_approval", "approved"];
 
 export const Route = createFileRoute("/order/$id/")({
   head: () => ({
