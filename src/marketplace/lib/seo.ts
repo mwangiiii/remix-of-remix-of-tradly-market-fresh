@@ -23,7 +23,6 @@ export function siteUrl(path = "/"): string {
 }
 
 export type JsonLdScript = {
-  key: string;
   type: "application/ld+json";
   children: string;
 };
@@ -33,15 +32,20 @@ export type JsonLdScript = {
 const LINE_SEP_RE = new RegExp(String.fromCharCode(0x2028), "g");
 const PARA_SEP_RE = new RegExp(String.fromCharCode(0x2029), "g");
 
-export function jsonLd(payload: Record<string, unknown>, key: string): JsonLdScript {
-  // U+2028 / U+2029 are valid JSON but break inline <script> parsing; </script
-  // inside a string would prematurely close the tag. Escape both.
+// Second arg is accepted for backwards compat with callers that pass a
+// stable id — but not returned. TanStack Router's HeadContent spreads
+// every top-level field on the script descriptor as an HTML attribute, so
+// putting `key` there triggers React 19's "key spread onto JSX" warning.
+// The router already dedupes scripts by JSON.stringify(tag), so identical
+// content collapses without needing an explicit key.
+export function jsonLd(payload: Record<string, unknown>, _key?: string): JsonLdScript {
+  void _key;
   const body = JSON.stringify(payload)
     .replace(LINE_SEP_RE, "\\u2028")
     .replace(PARA_SEP_RE, "\\u2029")
+    // </script inside a string would prematurely close the tag.
     .replace(/<\/(script)/gi, "<\\/$1");
   return {
-    key,
     type: "application/ld+json",
     children: body,
   };

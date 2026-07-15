@@ -1,4 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { QuantityStepper } from "../marketplace/components/QuantityStepper";
@@ -6,6 +8,8 @@ import { useCartStore, cartSubtotal } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
 import { X, BookmarkPlus, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
+import { createSavedList } from "../marketplace/api/marketplaceApi";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/cart")({
   head: () => ({
@@ -23,10 +27,42 @@ export const Route = createFileRoute("/cart")({
 
 function Cart() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const lines = useCartStore((s) => s.lines);
   const setQuantity = useCartStore((s) => s.setQuantity);
   const removeLine = useCartStore((s) => s.removeLine);
   const subtotal = cartSubtotal(lines);
+  const { isAuthenticated } = useAuth();
+  const [savingList, setSavingList] = useState(false);
+
+  const saveListMutation = useMutation({
+    mutationFn: (name: string) => createSavedList(name, lines),
+    onSuccess: (list) => {
+      qc.invalidateQueries({ queryKey: ["lists"] });
+      toast.success(`Saved "${list.name}" — ${list.items.length} item${list.items.length === 1 ? "" : "s"}`, {
+        action: {
+          label: "View lists",
+          onClick: () => navigate({ to: "/lists" }),
+        },
+      });
+    },
+    onError: (e: Error) => toast.error(e.message ?? "Could not save list"),
+  });
+
+  const handleSaveList = () => {
+    if (lines.length === 0) return;
+    if (!isAuthenticated) {
+      toast.error("Sign in to save this cart to a list.", {
+        action: { label: "Sign in", onClick: () => navigate({ to: "/login", search: { next: "/cart" } }) },
+      });
+      return;
+    }
+    const suggested = `Cart · ${new Date().toLocaleDateString("en-KE", { day: "numeric", month: "short" })}`;
+    const name = window.prompt("Name this saved list", suggested);
+    if (name == null) return;   // cancelled
+    setSavingList(true);
+    saveListMutation.mutate(name, { onSettled: () => setSavingList(false) });
+  };
 
   return (
     <AppShell variant="focused">
@@ -99,10 +135,12 @@ function Cart() {
 
               <button
                 type="button"
-                onClick={() => toast.success("Saved to a list for later")}
-                className="mt-4 inline-flex items-center gap-2 text-[13px] font-medium text-ink-muted hover:text-ink"
+                onClick={handleSaveList}
+                disabled={savingList}
+                className="mt-4 inline-flex items-center gap-2 text-[13px] font-medium text-ink-muted hover:text-ink disabled:opacity-60"
               >
-                <BookmarkPlus className="h-4 w-4" /> Save cart to a list
+                <BookmarkPlus className="h-4 w-4" />
+                {savingList ? "Saving…" : "Save cart to a list"}
               </button>
 
               <p className="mt-6 text-[11px] leading-relaxed text-ink-muted lg:text-[12px]">

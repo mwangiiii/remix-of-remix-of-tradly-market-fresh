@@ -15,11 +15,15 @@ export const Route = createFileRoute("/checkout")({
   component: Checkout,
 });
 
-function useActiveBranches() {
+function useActiveBranches(enabled: boolean) {
   return useQuery({
     queryKey: ["marketplace-branches"],
     staleTime: 30_000,
     queryFn: getBranches,
+    // Gate on auth: firing this before the JWT is in memory produces a
+    // silent 401 that just shows up as "no branches" in the UI.
+    enabled,
+    retry: 1,
   });
 }
 
@@ -29,7 +33,11 @@ function Checkout() {
   const clear = useCartStore((s) => s.clear);
   const { isAuthenticated, isInitializing } = useAuth();
 
-  const { data: branches = [], isLoading: branchesLoading } = useActiveBranches();
+  const {
+    data: branches = [],
+    isLoading: branchesLoading,
+    error: branchesError,
+  } = useActiveBranches(isAuthenticated);
 
   const [addressId, setAddressId] = useState<string | null>(null);
   const [date, setDate] = useState(() => {
@@ -54,6 +62,12 @@ function Checkout() {
       setAddressId(def.id);
     }
   }, [branches, addressId]);
+
+  useEffect(() => {
+    if (branchesError) {
+      console.error("[checkout] getBranches failed:", branchesError);
+    }
+  }, [branchesError]);
 
   // Checkout requires a real buyer session. Anonymous browsers get pushed to
   // /login with a `next` param so they land back here after signing in.
@@ -125,7 +139,18 @@ function Checkout() {
           {!branchesLoading && branches.length === 0 && (
             <div className="rounded-2xl border border-dashed border-divider py-8 text-center">
               <Building2 className="mx-auto h-5 w-5 text-ink-muted mb-2" />
-              <p className="text-[13px] text-ink-muted">No branches set up yet. Add one in Settings.</p>
+              {branchesError ? (
+                <>
+                  <p className="text-[13px] font-medium text-ink">Couldn't load branches.</p>
+                  <p className="mt-1 px-4 text-[12px] text-ink-muted">
+                    {branchesError instanceof Error
+                      ? branchesError.message
+                      : "Unknown error — check the browser console."}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[13px] text-ink-muted">No branches set up yet. Add one in Settings.</p>
+              )}
             </div>
           )}
 

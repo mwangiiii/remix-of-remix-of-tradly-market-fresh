@@ -5,6 +5,7 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { SearchBar } from "../marketplace/components/SearchBar";
+import { ProductGridSkeleton } from "../marketplace/components/Skeletons";
 import {
   getCategories,
   getProductsByCategory,
@@ -91,7 +92,7 @@ function CategoryView() {
     category: MarketplaceCategory;
     products: MarketplaceProduct[];
   };
-  const { data: products = initial } = useQuery({
+  const { data: products = initial, isFetching } = useQuery({
     queryKey: ["category", category.slug],
     queryFn: () => getProductsByCategory(category.slug),
     initialData: initial,
@@ -115,7 +116,11 @@ function CategoryView() {
           <CategoryPillRow activeSlug={category.slug} />
         </div>
 
-        {products.length === 0 ? (
+        {isFetching && products.length === 0 ? (
+          <div className="pt-5 lg:pt-8">
+            <ProductGridSkeleton count={8} />
+          </div>
+        ) : products.length === 0 ? (
           <p className="py-16 text-center text-sm text-ink-muted">
             No items yet in this category.{" "}
             <Link to="/" className="font-semibold text-ink underline underline-offset-4">Browse home</Link>

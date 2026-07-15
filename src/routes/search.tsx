@@ -7,7 +7,9 @@ import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { SearchBar } from "../marketplace/components/SearchBar";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
+import { ProductGridSkeleton } from "../marketplace/components/Skeletons";
 import { getCategories, searchProducts } from "../marketplace/api/marketplaceApi";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 
 const searchSchema = z.object({ q: z.string().optional() });
 
@@ -33,10 +35,17 @@ function SearchPage() {
   const [category, setCategory] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
 
+  // Debounce the URL query — user types "tomato", we don't fire five
+  // Supabase queries. 220ms feels instant while cutting request volume.
+  const debouncedQ = useDebouncedValue(q, 220);
+
   const { data = [], isFetching } = useQuery({
-    queryKey: ["search", q],
-    queryFn: () => searchProducts(q),
-    enabled: q.trim().length > 0,
+    queryKey: ["search", debouncedQ],
+    queryFn: () => searchProducts(debouncedQ),
+    enabled: debouncedQ.trim().length > 0,
+    // Skip the placeholder-flash when the user quickly changes the query:
+    // show the previous results until the new ones land.
+    placeholderData: (prev) => prev,
   });
 
   const { data: categories = [] } = useQuery({
@@ -87,7 +96,9 @@ function SearchPage() {
             </div>
 
             <div className="pt-5">
-              {results.length === 0 && !isFetching ? (
+              {isFetching && results.length === 0 ? (
+                <ProductGridSkeleton count={6} />
+              ) : results.length === 0 ? (
                 <div className="py-14 text-center">
                   <p className="text-sm text-ink">No matches for "{q}".</p>
                   <p className="mt-1 text-xs text-ink-muted">Try a category instead.</p>

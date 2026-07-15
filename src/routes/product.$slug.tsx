@@ -18,6 +18,7 @@ import {
   breadcrumbLd,
   SITE_NAME,
 } from "../marketplace/lib/seo";
+import { imgUrl, imgSrcSet } from "../marketplace/lib/img";
 import {
   MapPin, Maximize2,
   Snowflake, Package, Clock, Thermometer, Globe2, ReceiptText, Boxes, ChevronLeft, ChevronRight,
@@ -121,8 +122,11 @@ function ProductDetail() {
   const product = fresh ?? initial;
 
   const navigate = useNavigate();
-  const [selectedUnitId, setSelectedUnitId] = useState(
-    (product.units.find((u) => u.isDefault) ?? product.units[0]).id,
+  // A product might exist with zero units (draft saved without packaging).
+  // Never crash — the guarded render below shows a "not yet priced" state.
+  const initialUnit = product.units.find((u) => u.isDefault) ?? product.units[0];
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(
+    initialUnit?.id ?? null,
   );
   const [galleryIdx, setGalleryIdx] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -136,15 +140,15 @@ function ProductDetail() {
   const desktopThumbRailRef = useRef<HTMLDivElement | null>(null);
   const addLine = useCartStore((s) => s.addLine);
 
-  const unit = product.units.find((u) => u.id === selectedUnitId) ?? product.units[0];
-  const outOfStock = unit.availability === "out_of_stock";
+  const unit = product.units.find((u) => u.id === selectedUnitId) ?? product.units[0] ?? null;
+  const outOfStock = unit?.availability === "out_of_stock";
 
   // When the buyer switches pack (or lands on a unit with an MOQ > 1),
   // snap the quantity up to the minimum the DB says is orderable.
   useEffect(() => {
-    if (unit.moq && qty < unit.moq) setQty(unit.moq);
+    if (unit?.moq && qty < unit.moq) setQty(unit.moq);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unit.id, unit.moq]);
+  }, [unit?.id, unit?.moq]);
   // Structured media (images + videos) is the source of truth when present;
   // fall back to the legacy image-only gallery_urls for older rows.
   const galleryItems: import("../marketplace/components/FullscreenGallery").GalleryItem[] =
@@ -225,6 +229,7 @@ function ProductDetail() {
     .slice(0, 4);
 
   const handleAdd = () => {
+    if (!unit) return;
     addLine({
       productUnitId: unit.id,
       productId: product.id,
@@ -239,6 +244,41 @@ function ProductDetail() {
     navigate({ to: "/cart" });
   };
 
+  // Draft product with no packaging yet — show a graceful placeholder
+  // instead of crashing every unit.* access below.
+  if (!unit) {
+    return (
+      <AppShell variant="focused">
+        <div className="px-4 pb-16 lg:px-8">
+          <div className="lg:hidden">
+            <BrowseHeader title={product.name} back="/" />
+          </div>
+          <div className="mx-auto mt-6 max-w-md rounded-3xl border border-divider bg-surface p-8 text-center">
+            {product.thumbnailUrl && (
+              <img
+                src={imgUrl(product.thumbnailUrl, { width: 256 })}
+                alt={product.name}
+                decoding="async"
+                className="mx-auto h-32 w-32 rounded-2xl object-cover"
+              />
+            )}
+            <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink">{product.name}</h1>
+            <p className="mt-2 text-[13px] text-ink-muted">
+              Packaging and pricing haven't been set for this product yet.
+              Check back soon — Tradly is finalising it.
+            </p>
+            <Link
+              to="/"
+              className="mt-6 inline-block rounded-full bg-ink px-5 py-2.5 text-[13px] font-semibold text-background"
+            >
+              Back to market
+            </Link>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell variant="focused">
       <div className="px-4 pb-32 lg:px-8 lg:pb-16">
@@ -251,25 +291,12 @@ function ProductDetail() {
           <div>
             <div className="-mx-4 bg-surface pb-4 lg:mx-0 lg:rounded-3xl lg:pb-0">
               {currentItem?.kind === "video" ? (
-                <div className="group relative block aspect-square w-full overflow-hidden lg:rounded-3xl">
-                  <video
-                    key={currentItem.url}
-                    src={currentItem.url}
-                    poster={currentItem.posterUrl ?? product.thumbnailUrl}
-                    preload="metadata"
-                    controls
-                    playsInline
-                    className="h-full w-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setZoomOpen(true)}
-                    className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-90 backdrop-blur transition hover:opacity-100"
-                    aria-label="Open fullscreen video"
-                  >
-                    <Maximize2 className="h-4 w-4" />
-                  </button>
-                </div>
+                <VideoTile
+                  url={currentItem.url}
+                  mimeType={currentItem.mimeType ?? undefined}
+                  poster={currentItem.posterUrl ?? product.thumbnailUrl}
+                  onFullscreen={() => setZoomOpen(true)}
+                />
               ) : (
                 <button
                   type="button"
@@ -288,8 +315,13 @@ function ProductDetail() {
                   aria-label="Open fullscreen gallery"
                 >
                   <img
-                    src={currentItem?.url ?? product.thumbnailUrl}
+                    src={imgUrl(currentItem?.url ?? product.thumbnailUrl, { width: 900 })}
+                    srcSet={imgSrcSet(currentItem?.url ?? product.thumbnailUrl, [480, 720, 900, 1200, 1600])}
+                    sizes="(min-width: 1024px) 640px, 100vw"
                     alt={currentItem?.altText ?? `Fresh ${product.name} from Tradly`}
+                    // Hero is the LCP element on /product/:slug — never lazy.
+                    fetchPriority="high"
+                    decoding="async"
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                   />
                   <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-80 backdrop-blur transition group-hover:opacity-100">
@@ -330,7 +362,13 @@ function ProductDetail() {
                               </span>
                             </>
                           ) : (
-                            <img src={it.posterUrl ?? it.url} alt={`${product.name} thumbnail ${i + 1}`} className="h-full w-full object-cover" />
+                            <img
+                              src={imgUrl(it.posterUrl ?? it.url, { width: 160 })}
+                              alt={`${product.name} thumbnail ${i + 1}`}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover"
+                            />
                           )}
                         </button>
                       ))}
@@ -604,5 +642,69 @@ function ProductDetailsList({
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * Renders a product video with a proper source `type` (so the browser can
+ * decide up-front whether it can decode) and a graceful fallback if playback
+ * fails. Common failure case: iPhone videos in HEVC/H.265 — Chrome can't
+ * decode without hardware support. We surface a "download to watch" link
+ * so the buyer isn't left staring at a broken player.
+ */
+function VideoTile({
+  url,
+  mimeType,
+  poster,
+  onFullscreen,
+}: {
+  url: string;
+  mimeType?: string;
+  poster?: string;
+  onFullscreen: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="group relative block aspect-square w-full overflow-hidden lg:rounded-3xl">
+      {!failed ? (
+        <video
+          key={url}
+          poster={poster}
+          preload="metadata"
+          controls
+          playsInline
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        >
+          <source src={url} type={mimeType || "video/mp4"} />
+        </video>
+      ) : (
+        <div className="grid h-full w-full place-items-center bg-surface p-6 text-center">
+          <div>
+            <p className="text-[14px] font-semibold text-ink">
+              This video can't play in your browser
+            </p>
+            <p className="mt-1 text-[12px] text-ink-muted">
+              Likely encoded in a codec (e.g. HEVC/H.265) your browser doesn't support.
+            </p>
+            <a
+              href={url}
+              download
+              className="mt-4 inline-block rounded-full bg-farm px-4 py-2 text-[13px] font-semibold text-farm-foreground"
+            >
+              Download to watch
+            </a>
+          </div>
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onFullscreen}
+        className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-black/40 text-white opacity-90 backdrop-blur transition hover:opacity-100"
+        aria-label="Open fullscreen video"
+      >
+        <Maximize2 className="h-4 w-4" />
+      </button>
+    </div>
   );
 }

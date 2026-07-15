@@ -12,7 +12,7 @@
 //                                            is provisioned. NO mock data.
 
 import { getSupabase } from "@/lib/supabase";
-import { apiGet, apiPost } from "@/services/api";
+import { api, apiGet, apiPost } from "@/services/api";
 import { SEARCH_SYNONYMS } from "../config/searchSynonyms";
 import type {
   CartLine,
@@ -454,10 +454,18 @@ type BranchApiRow = {
 };
 
 export async function getBranches(): Promise<MarketplaceBranch[]> {
-  const data = await apiGet<{ branches: BranchApiRow[] }>("/branches", {
-    include_inactive: "false",
+  // Bypass apiGet's fixed envelope unwrap because /branches has historically
+  // shipped in three shapes across environments:
+  //   1. Tradly envelope:  { data: { branches: [...] }, error }
+  //   2. Wrapped:          { branches: [...] }
+  //   3. Bare array:       [ ...rows ]
+  // Normalise here so the checkout page doesn't silently show "no branches"
+  // when the function is healthy but shaped differently.
+  const res = await api.get<unknown>("/branches", {
+    params: { include_inactive: "false" },
   });
-  return (data.branches ?? [])
+  const rows = extractBranchRows(res.data);
+  return rows
     .filter((b) => b.is_active)
     .sort((a, b) => Number(b.is_default) - Number(a.is_default) || a.name.localeCompare(b.name))
     .map((b) => ({
@@ -469,6 +477,21 @@ export async function getBranches(): Promise<MarketplaceBranch[]> {
       isDefault: b.is_default,
       isActive: b.is_active,
     }));
+}
+
+function extractBranchRows(body: unknown): BranchApiRow[] {
+  if (Array.isArray(body)) return body as BranchApiRow[];
+  if (body && typeof body === "object") {
+    const o = body as Record<string, unknown>;
+    if (Array.isArray(o.branches)) return o.branches as BranchApiRow[];
+    if (o.data && typeof o.data === "object") {
+      const d = o.data as Record<string, unknown>;
+      if (Array.isArray(d.branches)) return d.branches as BranchApiRow[];
+      if (Array.isArray(o.data as unknown)) return o.data as BranchApiRow[];
+    }
+    if (Array.isArray(o.data)) return o.data as BranchApiRow[];
+  }
+  return [];
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -548,14 +571,98 @@ export async function updateOrderStatus(
   return undefined;
 }
 
-// Saved lists have no backing table yet. Return empty so the storefront
-// renders a proper "no saved lists" empty state — NO mock rows.
-export async function getSavedLists(): Promise<SavedList[]> {
-  return [];
+// ─────────────────────────────────────────────────────────────────────
+// Saved lists — backed by public.marketplace_saved_lists (JSONB items).
+// RLS scopes to business_id from the JWT, so buyers only see their own.
+// ─────────────────────────────────────────────────────────────────────
+
+type SavedListRow = { id: string; name: string; items: unknown; created_at: string };
+
+function normalizeItems(raw: unknown): CartLine[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((v): v is Record<string, unknown> => !!v && typeof v === "object")
+    .map((v) => ({
+      productUnitId: String(v.productUnitId ?? ""),
+      productId:     String(v.productId ?? ""),
+      productSlug:   String(v.productSlug ?? ""),
+      thumbnailUrl:  String(v.thumbnailUrl ?? ""),
+      productName:   String(v.productName ?? ""),
+      unitLabel:     String(v.unitLabel ?? ""),
+      quantity:      Number(v.quantity ?? 0),
+      priceKes:      Number(v.priceKes ?? 0),
+    }))
+    .filter((l) => l.productUnitId && l.quantity > 0);
 }
 
-export async function getSavedList(_id: string): Promise<SavedList | undefined> {
-  return undefined;
+/** Extract the buyer's business_id from the in-memory JWT (RLS needs it). */
+async function currentBusinessId(): Promise<string | null> {
+  const { useAuthStore } = await import("@/store/useAuthStore");
+  const token = useAuthStore.getState().accessToken;
+  if (!token) return null;
+  try {
+    const [, payload] = token.split(".");
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return (claims.business_id as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getSavedLists(): Promise<SavedList[]> {
+  const { data, error } = await getSupabase()
+    .from("marketplace_saved_lists")
+    .select("id, name, items, created_at")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => {
+    const row = r as unknown as SavedListRow;
+    return { id: row.id, name: row.name, items: normalizeItems(row.items) };
+  });
+}
+
+export async function getSavedList(id: string): Promise<SavedList | undefined> {
+  const { data, error } = await getSupabase()
+    .from("marketplace_saved_lists")
+    .select("id, name, items, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return undefined;
+  const row = data as unknown as SavedListRow;
+  return { id: row.id, name: row.name, items: normalizeItems(row.items) };
+}
+
+/** Save a cart snapshot as a named list. */
+export async function createSavedList(
+  name: string,
+  items: CartLine[],
+): Promise<SavedList> {
+  const businessId = await currentBusinessId();
+  if (!businessId) throw new Error("Sign in to save lists.");
+  const { data, error } = await getSupabase()
+    .from("marketplace_saved_lists")
+    .insert({
+      business_id: businessId,
+      name: name.trim() || "Untitled list",
+      items,
+    })
+    .select("id, name, items")
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id as string,
+    name: data.name as string,
+    items: normalizeItems((data as { items: unknown }).items),
+  };
+}
+
+export async function deleteSavedList(id: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from("marketplace_saved_lists")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
 }
 
 /**

@@ -6,6 +6,7 @@ import axios, { type AxiosInstance, type AxiosRequestConfig } from "axios";
 import { attachInterceptors } from "@/services/axiosInterceptor";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
 export const FUNCTIONS_BASE = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1` : "";
 
@@ -30,6 +31,10 @@ export const api: AxiosInstance = axios.create({
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
+    // Supabase's Edge Function gateway wants the project's anon key as `apikey`
+    // even when a user JWT is also sent — without it some routes return 401
+    // before the function runs.
+    ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY } : {}),
   },
 });
 

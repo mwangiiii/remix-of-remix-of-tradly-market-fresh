@@ -23,6 +23,19 @@ import {
   websiteLd,
 } from "../marketplace/lib/seo";
 
+// Every catalog image is served from the Supabase Storage origin, so warm
+// the TCP+TLS handshake in the initial HTML rather than waiting until the
+// first <img> triggers it.
+const SUPABASE_ORIGIN = ((): string | undefined => {
+  const raw = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  if (!raw) return undefined;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return undefined;
+  }
+})();
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -106,9 +119,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       links: [
         { rel: "stylesheet", href: appCss },
         { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+        { rel: "canonical", href: SITE_URL },
+        ...(SUPABASE_ORIGIN
+          ? [
+              { rel: "preconnect", href: SUPABASE_ORIGIN, crossOrigin: "anonymous" as const },
+              { rel: "dns-prefetch", href: SUPABASE_ORIGIN },
+            ]
+          : []),
         { rel: "preconnect", href: "https://fonts.googleapis.com" },
         { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-        { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" },
+        // display=optional: browsers skip the font swap if Inter isn't cached
+        // on first paint (system fallback stays) and use Inter on repeat
+        // visits when it's in the disk cache. Eliminates the font-swap CLS
+        // that was pushing 0.9+ on this page.
+        { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=optional" },
       ],
       scripts: [jsonLd(organizationLd(), "ld-org"), jsonLd(websiteLd(), "ld-website")],
     };

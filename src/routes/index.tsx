@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { SearchBar } from "../marketplace/components/SearchBar";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { Wordmark } from "../marketplace/components/BrowseHeader";
+import { ProductGridSkeleton } from "../marketplace/components/Skeletons";
 import { getAllProducts, getOrders } from "../marketplace/api/marketplaceApi";
 import { canonicalLink, siteUrl } from "../marketplace/lib/seo";
 
@@ -20,20 +22,26 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { data: products = [] } = useQuery({
+  const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["products"],
     queryFn: getAllProducts,
   });
-  const { data: orders = [] } = useQuery({ queryKey: ["orders"], queryFn: getOrders });
+  const { data: orders = [], isPending: ordersPending } = useQuery({
+    queryKey: ["orders"],
+    queryFn: getOrders,
+  });
 
-  const featured = products.filter((p) => p.isFeatured);
-  const todayPrices = products.slice(0, 8);
-
-  const freqIds = Array.from(new Set(orders.flatMap((o) => o.lines.map((l) => l.productId))));
-  const frequent = freqIds
-    .map((id) => products.find((p) => p.id === id))
-    .filter((p): p is NonNullable<typeof p> => Boolean(p))
-    .slice(0, 8);
+  // Memoize the derived slices so we don't recompute filter/find on every
+  // render (e.g. when unrelated state changes elsewhere in the tree).
+  const featured = useMemo(() => products.filter((p) => p.isFeatured), [products]);
+  const todayPrices = useMemo(() => products.slice(0, 8), [products]);
+  const frequent = useMemo(() => {
+    const freqIds = Array.from(new Set(orders.flatMap((o) => o.lines.map((l) => l.productId))));
+    return freqIds
+      .map((id) => products.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => Boolean(p))
+      .slice(0, 8);
+  }, [products, orders]);
 
   const today = new Date().toLocaleDateString("en-KE", { day: "numeric", month: "short" });
 
@@ -70,7 +78,12 @@ function Home() {
           <CategoryPillRow />
         </div>
 
-        {frequent.length > 0 && (
+        {/* Only render the frequent-reorder section once orders has resolved.
+            Rendering it later would push the whole rest of the page down and
+            spike CLS; keeping it hidden until we know the outcome means at
+            most one shift (when a user with orders lands), and never a
+            "phantom" section for a first-time buyer. */}
+        {!ordersPending && frequent.length > 0 && (
           <section className="pt-6 lg:pt-14">
             <div className="mb-3 flex items-baseline justify-between lg:mb-5">
               <h2 className="text-[15px] font-semibold text-ink lg:text-[22px] lg:tracking-tight">
@@ -81,9 +94,9 @@ function Home() {
               </Link>
             </div>
             <div className="hide-scrollbar -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 lg:mx-0 lg:grid lg:grid-cols-4 lg:gap-6 lg:overflow-visible lg:px-0">
-              {frequent.map((p) => (
+              {frequent.map((p, i) => (
                 <div key={p.id} className="w-40 shrink-0 snap-start lg:w-auto">
-                  <ProductCard product={p} />
+                  <ProductCard product={p} priority={i < 2} />
                 </div>
               ))}
             </div>
@@ -99,9 +112,18 @@ function Home() {
               Prices refreshed {today}
             </span>
           </div>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-6">
-            {todayPrices.map((p) => <ProductCard key={p.id} product={p} />)}
-          </div>
+          {productsLoading && todayPrices.length === 0 ? (
+            <ProductGridSkeleton count={8} />
+          ) : (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-6">
+              {todayPrices.map((p, i) => (
+                // First 4 tiles are above the fold on mobile (2 cols × 2 rows)
+                // and on desktop (4 cols × 1 row) — priority so the LCP image
+                // isn't lazy-loaded and gets fetchpriority=high.
+                <ProductCard key={p.id} product={p} priority={i < 4} />
+              ))}
+            </div>
+          )}
         </section>
 
         {featured.length > 0 && (
