@@ -1,5 +1,12 @@
+# robots.txt — Tradly Market
+# Sitemap is generated per-request from the live catalog so it always
+# reflects what buyers actually see. Docs: https://www.sitemaps.org/
+
 User-agent: *
 Allow: /
+
+# Buyer-only surfaces (behind auth or checkout flow) — no SEO value,
+# and RLS would return empty responses to Googlebot anyway.
 Disallow: /cart
 Disallow: /checkout
 Disallow: /account
@@ -10,5 +17,13 @@ Disallow: /notifications
 Disallow: /lists
 Disallow: /admin
 Disallow: /search
+
+# Server routes and API paths (defensive — none are indexable).
+Disallow: /api/
+Disallow: /functions/
+
+# Query-parameter noise: don't let facet/embed URLs create duplicate index entries.
+Disallow: /*?embed=
+Disallow: /*?next=
 
 Sitemap: https://market.tradly.co.ke/sitemap.xml

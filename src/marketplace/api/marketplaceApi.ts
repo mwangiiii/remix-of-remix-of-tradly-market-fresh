@@ -85,8 +85,7 @@ type ProductRow = {
   marketplace_product_media: MediaRow[] | null;
 };
 
-const num = (v: number | string): number =>
-  typeof v === "number" ? v : Number(v);
+const num = (v: number | string): number => (typeof v === "number" ? v : Number(v));
 
 function mapCategory(row: CategoryRow): MarketplaceCategory {
   return {
@@ -133,9 +132,7 @@ function mapProduct(row: ProductRow): MarketplaceProduct {
     galleryLegacy[0] ??
     "";
   const derivedGallery =
-    media.length > 0
-      ? media.filter((m) => m.kind === "image").map((m) => m.url)
-      : galleryLegacy;
+    media.length > 0 ? media.filter((m) => m.kind === "image").map((m) => m.url) : galleryLegacy;
   const units = (row.marketplace_product_units ?? [])
     .slice()
     .sort((a, b) => a.display_order - b.display_order)
@@ -202,9 +199,7 @@ export async function getAllProducts(): Promise<MarketplaceProduct[]> {
   return (data ?? []).map(mapProduct);
 }
 
-export async function getProductsByCategory(
-  categorySlug: string,
-): Promise<MarketplaceProduct[]> {
+export async function getProductsByCategory(categorySlug: string): Promise<MarketplaceProduct[]> {
   const sb = getSupabase();
   const cat = await sb
     .from("marketplace_categories")
@@ -222,9 +217,7 @@ export async function getProductsByCategory(
   return (data ?? []).map(mapProduct);
 }
 
-export async function getProduct(
-  slug: string,
-): Promise<MarketplaceProduct | undefined> {
+export async function getProduct(slug: string): Promise<MarketplaceProduct | undefined> {
   const { data, error } = await getSupabase()
     .from("marketplace_products")
     .select(PRODUCT_SELECT)
@@ -234,9 +227,7 @@ export async function getProduct(
   return data ? mapProduct(data as ProductRow) : undefined;
 }
 
-export async function searchProducts(
-  query: string,
-): Promise<MarketplaceProduct[]> {
+export async function searchProducts(query: string): Promise<MarketplaceProduct[]> {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const expanded = new Set<string>([q]);
@@ -273,16 +264,26 @@ export async function searchProducts(
  */
 function toOrderStatus(unified: string | null | undefined): OrderStatus {
   switch (unified) {
-    case "draft":            return "draft";
-    case "pending_approval": return "pending_approval";
-    case "approved":         return "approved";
-    case "po_generated":     return "po_generated";
-    case "delivered":        return "delivered";
-    case "invoiced":         return "invoiced";
-    case "paid":             return "paid";
-    case "cancelled":        return "cancelled";
-    case "rejected":         return "cancelled";
-    default:                 return "pending_approval";
+    case "draft":
+      return "draft";
+    case "pending_approval":
+      return "pending_approval";
+    case "approved":
+      return "approved";
+    case "po_generated":
+      return "po_generated";
+    case "delivered":
+      return "delivered";
+    case "invoiced":
+      return "invoiced";
+    case "paid":
+      return "paid";
+    case "cancelled":
+      return "cancelled";
+    case "rejected":
+      return "cancelled";
+    default:
+      return "pending_approval";
   }
 }
 
@@ -349,7 +350,9 @@ function mapOrder(r: PrRow, s?: StatusRow | null): MarketplaceOrder {
     requestNumber: r.request_number,
     status: toOrderStatus(s?.unified_status ?? r.status),
     lines,
-    totalKes: num(r.estimated_total_kes ?? lines.reduce((s2, l) => s2 + l.priceKes * l.quantity, 0)),
+    totalKes: num(
+      r.estimated_total_kes ?? lines.reduce((s2, l) => s2 + l.priceKes * l.quantity, 0),
+    ),
     submittedAt: r.created_at,
     expectedDeliveryDate: r.expected_delivery_date ?? "",
     poNumber: s?.po_number ?? null,
@@ -420,7 +423,10 @@ export async function getOrder(id: string): Promise<MarketplaceOrder | undefined
   if (prRes.error) throw prRes.error;
   if (statusRes.error) throw statusRes.error;
   return prRes.data
-    ? mapOrder(prRes.data as unknown as PrRow, (statusRes.data ?? null) as unknown as StatusRow | null)
+    ? mapOrder(
+        prRes.data as unknown as PrRow,
+        (statusRes.data ?? null) as unknown as StatusRow | null,
+      )
     : undefined;
 }
 
@@ -584,13 +590,13 @@ function normalizeItems(raw: unknown): CartLine[] {
     .filter((v): v is Record<string, unknown> => !!v && typeof v === "object")
     .map((v) => ({
       productUnitId: String(v.productUnitId ?? ""),
-      productId:     String(v.productId ?? ""),
-      productSlug:   String(v.productSlug ?? ""),
-      thumbnailUrl:  String(v.thumbnailUrl ?? ""),
-      productName:   String(v.productName ?? ""),
-      unitLabel:     String(v.unitLabel ?? ""),
-      quantity:      Number(v.quantity ?? 0),
-      priceKes:      Number(v.priceKes ?? 0),
+      productId: String(v.productId ?? ""),
+      productSlug: String(v.productSlug ?? ""),
+      thumbnailUrl: String(v.thumbnailUrl ?? ""),
+      productName: String(v.productName ?? ""),
+      unitLabel: String(v.unitLabel ?? ""),
+      quantity: Number(v.quantity ?? 0),
+      priceKes: Number(v.priceKes ?? 0),
     }))
     .filter((l) => l.productUnitId && l.quantity > 0);
 }
@@ -634,10 +640,7 @@ export async function getSavedList(id: string): Promise<SavedList | undefined> {
 }
 
 /** Save a cart snapshot as a named list. */
-export async function createSavedList(
-  name: string,
-  items: CartLine[],
-): Promise<SavedList> {
+export async function createSavedList(name: string, items: CartLine[]): Promise<SavedList> {
   const businessId = await currentBusinessId();
   if (!businessId) throw new Error("Sign in to save lists.");
   const { data, error } = await getSupabase()
@@ -658,11 +661,42 @@ export async function createSavedList(
 }
 
 export async function deleteSavedList(id: string): Promise<void> {
-  const { error } = await getSupabase()
-    .from("marketplace_saved_lists")
-    .delete()
-    .eq("id", id);
+  const { error } = await getSupabase().from("marketplace_saved_lists").delete().eq("id", id);
   if (error) throw error;
+}
+
+/**
+ * Patch an existing saved list. Any subset of {name, items} can be sent.
+ * Items are stored as JSONB so we always replace the whole array — the
+ * caller is responsible for computing the new items list (add / remove /
+ * bump-quantity). RLS on marketplace_saved_lists restricts writes to the
+ * caller's own business_id, so no extra guard is needed here.
+ */
+export async function updateSavedList(
+  id: string,
+  patch: { name?: string; items?: CartLine[] },
+): Promise<SavedList> {
+  const payload: Record<string, unknown> = {};
+  if (typeof patch.name === "string") payload.name = patch.name.trim() || "Untitled list";
+  if (patch.items) payload.items = patch.items;
+  if (Object.keys(payload).length === 0) {
+    // Nothing to update — round-trip a read so callers still get the current row.
+    const current = await getSavedList(id);
+    if (!current) throw new Error("List not found");
+    return current;
+  }
+  const { data, error } = await getSupabase()
+    .from("marketplace_saved_lists")
+    .update(payload)
+    .eq("id", id)
+    .select("id, name, items")
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id as string,
+    name: data.name as string,
+    items: normalizeItems((data as { items: unknown }).items),
+  };
 }
 
 /**
@@ -686,8 +720,11 @@ type InboxRow = {
 
 function inboxReference(row: InboxRow): string | undefined {
   const meta = row.metadata ?? {};
-  const rn = (meta["request_number"] ?? meta["po_number"] ?? meta["grn_number"] ??
-              meta["invoice_number"] ?? meta["payment_number"]) as string | undefined;
+  const rn = (meta["request_number"] ??
+    meta["po_number"] ??
+    meta["grn_number"] ??
+    meta["invoice_number"] ??
+    meta["payment_number"]) as string | undefined;
   return rn ?? undefined;
 }
 

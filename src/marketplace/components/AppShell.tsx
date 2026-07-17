@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
 import { BottomNav } from "./BottomNav";
 import { TopNav } from "./TopNav";
 import { useCatalogRealtime } from "../hooks/useCatalogRealtime";
@@ -58,7 +59,41 @@ export function AppShell({
       >
         {children}
       </main>
+      {!chromeless && <SiteFooter />}
       {!chromeless && <BottomNav />}
     </div>
+  );
+}
+
+/**
+ * Slim site-wide footer. Its main job is being crawlable — every page
+ * needs a link into /faq so that route indexes fast. Kept intentionally
+ * spare (no "About / Careers / Blog" invented links) to avoid dead
+ * pointers Googlebot would flag.
+ *
+ * On mobile it sits above BottomNav (which is fixed) via `pb-20`, on
+ * desktop the container's own padding handles the spacing.
+ */
+function SiteFooter() {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="mx-auto max-w-lg px-4 pb-20 pt-8 text-[12px] text-ink-muted lg:max-w-7xl lg:px-8 lg:pb-12">
+      <div className="flex flex-col items-start gap-3 border-t border-divider pt-6 lg:flex-row lg:items-center lg:justify-between">
+        <p>© {year} Tradly Ltd — Nairobi, Kenya</p>
+        <nav aria-label="Footer">
+          <ul className="flex flex-wrap gap-x-5 gap-y-2">
+            <li>
+              <Link to="/faq" className="hover:text-ink">FAQ</Link>
+            </li>
+            <li>
+              <Link to="/account" className="hover:text-ink">Account</Link>
+            </li>
+            <li>
+              <Link to="/orders" className="hover:text-ink">Orders</Link>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </footer>
   );
 }

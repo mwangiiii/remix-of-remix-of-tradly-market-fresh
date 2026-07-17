@@ -1,0 +1,55 @@
+{
+  "name": "Tradly Market",
+  "short_name": "Tradly",
+  "description": "Fresh produce and food-service essentials for Kenyan kitchens. Same-day dispatch across Nairobi, Kiambu, Kirinyaga, Murang'a and Embu.",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#FAFAF8",
+  "theme_color": "#FAFAF8",
+  "lang": "en-KE",
+  "dir": "ltr",
+  "categories": ["food", "shopping", "business"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "32x32 48x48",
+      "type": "image/x-icon"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Browse the market",
+      "short_name": "Browse",
+      "url": "/",
+      "description": "See today's fresh picks and reorder essentials."
+    },
+    {
+      "name": "Your cart",
+      "short_name": "Cart",
+      "url": "/cart",
+      "description": "Review the items in your cart before checkout."
+    },
+    {
+      "name": "Saved lists",
+      "short_name": "Lists",
+      "url": "/lists",
+      "description": "Reorder from your saved procurement lists."
+    }
+  ]
+}

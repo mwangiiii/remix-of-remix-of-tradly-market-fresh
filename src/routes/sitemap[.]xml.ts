@@ -16,8 +16,18 @@ export const Route = createFileRoute("/sitemap.xml")({
       GET: async () => {
         const lastmod = new Date().toISOString().slice(0, 10);
 
-        const entries: { path: string; changefreq: string; priority: string }[] = [
+        type Entry = {
+          path: string;
+          changefreq: string;
+          priority: string;
+          // Optional per-URL image list — emitted using the sitemap-image
+          // extension so Google can index product photos for Google Images.
+          images?: Array<{ loc: string; title?: string }>;
+        };
+        const entries: Entry[] = [
           { path: "/", changefreq: "daily", priority: "1.0" },
+          // /faq answers rarely change — weekly is honest.
+          { path: "/faq", changefreq: "weekly", priority: "0.5" },
         ];
 
         if (supabaseUrl && supabaseAnonKey) {
@@ -27,7 +37,10 @@ export const Route = createFileRoute("/sitemap.xml")({
             });
             const [cats, prods] = await Promise.all([
               sb.from("marketplace_categories").select("slug").order("display_order"),
-              sb.from("marketplace_products").select("slug").order("name"),
+              sb
+                .from("marketplace_products")
+                .select("slug, name, thumbnail_url")
+                .order("name"),
             ]);
             for (const c of cats.data ?? []) {
               entries.push({
@@ -37,10 +50,14 @@ export const Route = createFileRoute("/sitemap.xml")({
               });
             }
             for (const p of prods.data ?? []) {
+              const row = p as { slug: string; name: string | null; thumbnail_url: string | null };
               entries.push({
-                path: `/product/${(p as { slug: string }).slug}`,
+                path: `/product/${row.slug}`,
                 changefreq: "daily",
                 priority: "0.7",
+                images: row.thumbnail_url
+                  ? [{ loc: row.thumbnail_url, title: row.name ?? undefined }]
+                  : undefined,
               });
             }
           } catch {
@@ -48,20 +65,37 @@ export const Route = createFileRoute("/sitemap.xml")({
           }
         }
 
-        const urls = entries.map((e) =>
-          [
+        // Escape the five XML entities that would otherwise poison the doc
+        // if a product title or URL contained &, <, >, ', or ".
+        const esc = (s: string): string =>
+          s
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&apos;");
+
+        const urls = entries.map((e) => {
+          const lines = [
             `  <url>`,
-            `    <loc>${SITE_URL}${e.path}</loc>`,
+            `    <loc>${esc(`${SITE_URL}${e.path}`)}</loc>`,
             `    <lastmod>${lastmod}</lastmod>`,
             `    <changefreq>${e.changefreq}</changefreq>`,
             `    <priority>${e.priority}</priority>`,
-            `  </url>`,
-          ].join("\n"),
-        );
+          ];
+          for (const img of e.images ?? []) {
+            lines.push(`    <image:image>`);
+            lines.push(`      <image:loc>${esc(img.loc)}</image:loc>`);
+            if (img.title) lines.push(`      <image:title>${esc(img.title)}</image:title>`);
+            lines.push(`    </image:image>`);
+          }
+          lines.push(`  </url>`);
+          return lines.join("\n");
+        });
 
         const xml = [
           `<?xml version="1.0" encoding="UTF-8"?>`,
-          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`,
+          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">`,
           ...urls,
           `</urlset>`,
         ].join("\n");

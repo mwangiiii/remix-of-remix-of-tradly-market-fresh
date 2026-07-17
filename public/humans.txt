@@ -1,0 +1,16 @@
+/* TEAM */
+
+    Tradly — Nairobi, Kenya
+    Contact: hello [at] tradly.co.ke
+    LinkedIn: https://www.linkedin.com/company/tradly-procurement-saas/
+    Instagram: https://www.instagram.com/tradly_app/
+    Facebook: https://www.facebook.com/tradlyapp
+
+/* SITE */
+
+    Language: English (Kenya)
+    Doctype: HTML5
+    Standards: WCAG 2.1 AA
+    Components: TanStack Start, React 18, TypeScript, Tailwind CSS,
+                shadcn/ui (Radix), Zustand, TanStack Query, Supabase
+    Hosting: Vercel + Supabase (Nairobi region-latency optimised)

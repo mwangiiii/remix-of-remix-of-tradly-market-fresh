@@ -21,6 +21,7 @@ import {
   jsonLd,
   organizationLd,
   websiteLd,
+  localBusinessLd,
 } from "../marketplace/lib/seo";
 
 // Every catalog image is served from the Supabase Storage origin, so warm
@@ -119,6 +120,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       links: [
         { rel: "stylesheet", href: appCss },
         { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+        { rel: "alternate icon", href: "/favicon.ico", type: "image/x-icon" },
+        // PWA manifest — enables Add-to-Home-Screen + Google's PWA signals.
+        { rel: "manifest", href: "/site.webmanifest" },
         { rel: "canonical", href: SITE_URL },
         ...(SUPABASE_ORIGIN
           ? [
@@ -134,7 +138,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         // that was pushing 0.9+ on this page.
         { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=optional" },
       ],
-      scripts: [jsonLd(organizationLd(), "ld-org"), jsonLd(websiteLd(), "ld-website")],
+      scripts: [
+        jsonLd(organizationLd(), "ld-org"),
+        jsonLd(websiteLd(), "ld-website"),
+        jsonLd(localBusinessLd(), "ld-localbiz"),
+      ],
     };
   },
   shellComponent: RootShell,
