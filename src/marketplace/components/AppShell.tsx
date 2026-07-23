@@ -15,7 +15,7 @@ function isEmbedded(): boolean {
     if (new URLSearchParams(window.location.search).has("embed")) return true;
     return window.self !== window.top;
   } catch {
-    return true;   // if reading window.top throws, we're cross-origin framed
+    return true; // if reading window.top throws, we're cross-origin framed
   }
 }
 
@@ -83,13 +83,34 @@ function SiteFooter() {
         <nav aria-label="Footer">
           <ul className="flex flex-wrap gap-x-5 gap-y-2">
             <li>
-              <Link to="/faq" className="hover:text-ink">FAQ</Link>
+              <Link to="/about" className="hover:text-ink">
+                About
+              </Link>
             </li>
             <li>
-              <Link to="/account" className="hover:text-ink">Account</Link>
+              <Link to="/how-it-works" className="hover:text-ink">
+                How it works
+              </Link>
             </li>
             <li>
-              <Link to="/orders" className="hover:text-ink">Orders</Link>
+              <Link to="/faq" className="hover:text-ink">
+                FAQ
+              </Link>
+            </li>
+            <li>
+              <Link to="/contact" className="hover:text-ink">
+                Contact
+              </Link>
+            </li>
+            <li>
+              <Link to="/account" className="hover:text-ink">
+                Account
+              </Link>
+            </li>
+            <li>
+              <Link to="/orders" className="hover:text-ink">
+                Orders
+              </Link>
             </li>
           </ul>
         </nav>

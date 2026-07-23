@@ -1,12 +1,24 @@
-# robots.txt — Tradly Market
-# Sitemap is generated per-request from the live catalog so it always
-# reflects what buyers actually see. Docs: https://www.sitemaps.org/
+# robots.txt — market.tradly.co.ke
+#
+# Two audiences:
+#   1. Classic search engines (Google, Bing) — they run JS but still key off
+#      the raw HTML we now emit via TanStack Start's SSR.
+#   2. AI answer engines (ChatGPT / Claude / Perplexity / Gemini / Copilot).
+#      Most DO NOT run JavaScript. They read the raw HTML the server returns.
+#      Because Start SSRs every route (see src/routes/__root.tsx), they see
+#      the full <head> + JSON-LD immediately — no client hydration needed.
+#
+# The sitemap is generated per-request from Supabase, so it always mirrors
+# the live catalog. See src/routes/sitemap[.]xml.ts.
 
+# ─────────────────────────────────────────────────────────────────────────
+# Default: all crawlers may access public content
+# ─────────────────────────────────────────────────────────────────────────
 User-agent: *
 Allow: /
 
-# Buyer-only surfaces (behind auth or checkout flow) — no SEO value,
-# and RLS would return empty responses to Googlebot anyway.
+# Buyer-only surfaces (behind auth or checkout flow). RLS returns empty
+# responses to anonymous crawlers anyway — this just saves the round-trip.
 Disallow: /cart
 Disallow: /checkout
 Disallow: /account
@@ -18,12 +30,90 @@ Disallow: /lists
 Disallow: /admin
 Disallow: /search
 
-# Server routes and API paths (defensive — none are indexable).
+# Server-only routes (none are indexable; defensive).
 Disallow: /api/
 Disallow: /functions/
 
-# Query-parameter noise: don't let facet/embed URLs create duplicate index entries.
+# Query-parameter noise — don't let facet / embed / attribution URLs
+# create duplicate index entries.
 Disallow: /*?embed=
 Disallow: /*?next=
+Disallow: /*?sort=
+Disallow: /*?filter=
+Disallow: /*?ref=
+Disallow: /*?utm_
 
+# ─────────────────────────────────────────────────────────────────────────
+# AI / LLM crawlers — EXPLICITLY ALLOWED (Tradly WANTS to be cited)
+#
+# Two kinds of bot exist:
+#   (a) live-fetch / citation bots — pull the page in real time to answer
+#       a user query and cite the source (OAI-SearchBot, ChatGPT-User,
+#       PerplexityBot, Claude-Web, Applebot).
+#   (b) training bots — ingest content into the model (GPTBot, ClaudeBot,
+#       Google-Extended, CCBot, Applebot-Extended, anthropic-ai).
+#
+# Both are Allow'd below. To opt OUT of model TRAINING while keeping live
+# citation, switch (b)'s Allow lines to Disallow — comments mark them.
+# ─────────────────────────────────────────────────────────────────────────
+
+# OpenAI / ChatGPT
+User-agent: GPTBot                   # (b) training
+Allow: /
+User-agent: OAI-SearchBot            # (a) live citation
+Allow: /
+User-agent: ChatGPT-User             # (a) user-initiated fetch
+Allow: /
+
+# Anthropic / Claude
+User-agent: ClaudeBot                # (b) training
+Allow: /
+User-agent: Claude-Web               # (a) live citation
+Allow: /
+User-agent: anthropic-ai             # (b) training
+Allow: /
+
+# Google (Gemini + AI Overviews — Google-Extended is SEPARATE from Googlebot)
+User-agent: Google-Extended          # (b) training
+Allow: /
+
+# Perplexity
+User-agent: PerplexityBot            # (a) live citation
+Allow: /
+User-agent: Perplexity-User          # (a) user-initiated fetch
+Allow: /
+
+# Apple Intelligence
+User-agent: Applebot                 # (a) live citation
+Allow: /
+User-agent: Applebot-Extended        # (b) training
+Allow: /
+
+# Common Crawl (feeds many open-weight models)
+User-agent: CCBot                    # (b) training
+Allow: /
+
+# Meta AI
+User-agent: FacebookBot              # (a) live citation
+Allow: /
+User-agent: meta-externalagent       # (b) training
+Allow: /
+
+# ByteDance (TikTok / Doubao)
+User-agent: Bytespider               # (b) training
+Allow: /
+
+# Amazon
+User-agent: Amazonbot                # (a) live citation
+Allow: /
+
+# Cohere / You.com / Diffbot
+User-agent: cohere-ai                # (b) training
+Allow: /
+User-agent: YouBot                   # (a) live citation
+Allow: /
+User-agent: Diffbot                  # enrichment
+Allow: /
+
+# ─────────────────────────────────────────────────────────────────────────
 Sitemap: https://market.tradly.co.ke/sitemap.xml

@@ -26,6 +26,11 @@ export const Route = createFileRoute("/sitemap.xml")({
         };
         const entries: Entry[] = [
           { path: "/", changefreq: "daily", priority: "1.0" },
+          // Marketing / definition pages — copy rarely changes; monthly is
+          // honest and stops Googlebot re-fetching them wastefully.
+          { path: "/about", changefreq: "monthly", priority: "0.7" },
+          { path: "/how-it-works", changefreq: "monthly", priority: "0.7" },
+          { path: "/contact", changefreq: "monthly", priority: "0.5" },
           // /faq answers rarely change — weekly is honest.
           { path: "/faq", changefreq: "weekly", priority: "0.5" },
         ];
@@ -37,10 +42,7 @@ export const Route = createFileRoute("/sitemap.xml")({
             });
             const [cats, prods] = await Promise.all([
               sb.from("marketplace_categories").select("slug").order("display_order"),
-              sb
-                .from("marketplace_products")
-                .select("slug, name, thumbnail_url")
-                .order("name"),
+              sb.from("marketplace_products").select("slug, name, thumbnail_url").order("name"),
             ]);
             for (const c of cats.data ?? []) {
               entries.push({

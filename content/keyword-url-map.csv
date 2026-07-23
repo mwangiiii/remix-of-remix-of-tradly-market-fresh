@@ -1,0 +1,138 @@
+#,Search Query,Context Cluster,Intent,Funnel,SL,TF,Priority Score,Tier,Target URL
+1,buy fresh produce direct from farmers Kenya,Direct-from-Market Agri Sourcing,Commercial,MOFU,3,3,9,P1,https://market.tradly.co.ke/categories/fresh-produce
+2,direct from farm vegetable supplier Nairobi,Direct-from-Market Agri Sourcing,Commercial,MOFU,3,3,9,P1,https://market.tradly.co.ke/categories/fresh-produce/vegetables
+3,fresh produce direct from market Kenya,Direct-from-Market Agri Sourcing,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/categories/fresh-produce
+4,farm fresh vegetables for restaurants,Direct-from-Market Agri Sourcing,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/hotels-restaurants
+5,buy vegetables directly from farmers no middleman,Direct-from-Market Agri Sourcing,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/blog/buy-fresh-produce-direct-from-farmers-kenya
+6,direct farm produce delivery Nairobi business,Direct-from-Market Agri Sourcing,Transactional,BOFU,2,3,6,P1,https://market.tradly.co.ke/browse
+7,where to buy farm produce in bulk Kenya,Direct-from-Market Agri Sourcing,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+8,fresh produce from Kirinyaga farmers,Direct-from-Market Agri Sourcing,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/categories/fresh-produce
+9,farm to business vegetable supply Kenya,Direct-from-Market Agri Sourcing,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/corporates
+10,order fresh vegetables online for my business Kenya,Direct-from-Market Agri Sourcing,Transactional,BOFU,2,3,6,P1,https://market.tradly.co.ke/browse
+11,direct market prices vegetables Kenya,Direct-from-Market Agri Sourcing,Informational,TOFU,2,2,4,P2,https://market.tradly.co.ke/market-prices
+12,buy fruits and vegetables wholesale from farmers,Direct-from-Market Agri Sourcing,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+13,bulk vegetable supplier for institutions Kenya,Corporate / Institutional Agri Procurement,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/corporates
+14,corporate fresh produce supplier Kenya,Corporate / Institutional Agri Procurement,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/corporates
+15,institutional food supplier Nairobi,Corporate / Institutional Agri Procurement,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/corporates
+16,fresh produce supplier for hotels and restaurants,Corporate / Institutional Agri Procurement,Commercial,MOFU,3,3,9,P1,https://market.tradly.co.ke/for/hotels-restaurants
+17,fruit and vegetable supplier tender Kenya,Corporate / Institutional Agri Procurement,Transactional,BOFU,2,2,4,P2,https://market.tradly.co.ke/suppliers/register
+18,registered fresh produce vendor for companies,Corporate / Institutional Agri Procurement,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/corporates
+19,produce supply contract for institutions Kenya,Corporate / Institutional Agri Procurement,Transactional,BOFU,1,3,3,P2,https://market.tradly.co.ke/for/corporates
+20,corporate agri procurement platform Kenya,Corporate / Institutional Agri Procurement,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/corporates
+21,reliable vegetable supplier for large kitchens,Corporate / Institutional Agri Procurement,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/corporates
+22,bulk fresh produce delivery for offices,Corporate / Institutional Agri Procurement,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/categories/corporate-supplies/office-pantry
+23,supply fresh food to institutions Kenya,Corporate / Institutional Agri Procurement,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/corporates
+24,agricultural products supplier for corporates,Corporate / Institutional Agri Procurement,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/for/corporates
+25,restaurant food supplier Nairobi,Hospitality Supply,Commercial,MOFU,3,3,9,P1,https://market.tradly.co.ke/for/hotels-restaurants
+26,hotel fresh produce supplier Kenya,Hospitality Supply,Commercial,MOFU,3,3,9,P1,https://market.tradly.co.ke/for/hotels-restaurants
+27,kitchen supplies supplier for restaurants Kenya,Hospitality Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/categories/corporate-supplies
+28,vegetable supplier for hotels Nairobi,Hospitality Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/hotels-restaurants
+29,restaurant produce delivery service Kenya,Hospitality Supply,Transactional,BOFU,2,3,6,P1,https://market.tradly.co.ke/browse
+30,food and beverage supplier for hospitality Kenya,Hospitality Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/hotels-restaurants
+31,wholesale food supplier for cafes and restaurants,Hospitality Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+32,reliable produce supplier for my restaurant,Hospitality Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/hotels-restaurants
+33,hotel kitchen procurement supplier Kenya,Hospitality Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/hotels-restaurants
+34,lodge and camp food supply Kenya,Hospitality Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/hotels-restaurants
+35,restaurant grocery supplier near me,Hospitality Supply,Transactional,BOFU,2,3,6,P1,https://market.tradly.co.ke/browse
+36,bar and restaurant supplies Kenya,Hospitality Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/categories/corporate-supplies
+37,office supplies supplier Kenya,Corporate Items / Office & Facilities Supply,Commercial,MOFU,3,2,6,P1,https://market.tradly.co.ke/categories/corporate-supplies
+38,corporate supplies supplier Nairobi,Corporate Items / Office & Facilities Supply,Commercial,MOFU,2,2,4,P2,https://market.tradly.co.ke/categories/corporate-supplies
+39,office pantry supplies delivery Kenya,Corporate Items / Office & Facilities Supply,Transactional,BOFU,2,3,6,P1,https://market.tradly.co.ke/categories/corporate-supplies/office-pantry
+40,cleaning supplies supplier for offices Kenya,Corporate Items / Office & Facilities Supply,Commercial,MOFU,2,2,4,P2,https://market.tradly.co.ke/categories/corporate-supplies/cleaning
+41,corporate consumables supplier Kenya,Corporate Items / Office & Facilities Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/categories/corporate-supplies
+42,office kitchen supplies supplier Nairobi,Corporate Items / Office & Facilities Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/categories/corporate-supplies/office-pantry
+43,bulk office groceries supplier Kenya,Corporate Items / Office & Facilities Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/categories/corporate-supplies/office-pantry
+44,staff tea and snacks supplier for offices,Corporate Items / Office & Facilities Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/categories/corporate-supplies/office-pantry
+45,facilities management supplies Kenya,Corporate Items / Office & Facilities Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/categories/corporate-supplies
+46,corporate items supplier online Kenya,Corporate Items / Office & Facilities Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/categories/corporate-supplies
+47,where to buy office supplies wholesale Nairobi,Corporate Items / Office & Facilities Supply,Commercial,MOFU,2,2,4,P2,https://market.tradly.co.ke/wholesale
+48,company procurement supplier for everyday items,Corporate Items / Office & Facilities Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/for/corporates
+49,where to sell farm produce online Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,3,3,9,P1,https://market.tradly.co.ke/sell
+50,platform to sell vegetables to businesses Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,2,3,6,P1,https://market.tradly.co.ke/sell
+51,B2B marketplace to list products Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,2,3,6,P1,https://market.tradly.co.ke/sell
+52,advertise my products to businesses Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,2,3,6,P1,https://market.tradly.co.ke/sell
+53,sell farm produce to hotels and restaurants,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,2,3,6,P1,https://market.tradly.co.ke/blog/sell-farm-produce-to-hotels-schools-institutions
+54,online market to sell agricultural products Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,2,3,6,P1,https://market.tradly.co.ke/sell
+55,list my business on B2B platform Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,1,3,3,P2,https://market.tradly.co.ke/sell
+56,how to find buyers for my farm produce Kenya,B2B Listing / Advertising (Supply-side),Informational,TOFU,3,3,9,P1,https://market.tradly.co.ke/blog/find-buyers-for-farm-produce-kenya
+57,supplier registration for corporate buyers Kenya,B2B Listing / Advertising (Supply-side),Transactional,BOFU,1,3,3,P2,https://market.tradly.co.ke/suppliers/register
+58,become a supplier for restaurants Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,1,3,3,P2,https://market.tradly.co.ke/sell
+59,advertise wholesale produce online Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,1,3,3,P2,https://market.tradly.co.ke/sell
+60,digital marketplace for farmers Kenya,B2B Listing / Advertising (Supply-side),Commercial,MOFU,2,2,4,P2,https://market.tradly.co.ke/sell
+61,platform to advertise corporate items Kenya,B2B Listing / Advertising (Supply-side),Supply-side,MOFU,1,3,3,P2,https://market.tradly.co.ke/sell
+62,procurement software for restaurants Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/how-it-works
+63,supplier management platform Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+64,purchase order software for small business Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+65,procure to pay software Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+66,inventory and procurement system for hotels,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+67,eTIMS compliant procurement software Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/etims-compliance
+68,software to compare supplier prices Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+69,digitize restaurant procurement Kenya,Procurement Software / Platform Seekers,Informational,TOFU,1,3,3,P2,https://market.tradly.co.ke/blog/digitize-procurement-kenyan-smes
+70,supplier price comparison tool Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+71,best procurement app for SMEs Kenya,Procurement Software / Platform Seekers,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+72,wholesale vegetables Nairobi,Wholesale / Bulk Buying,Commercial,MOFU,3,3,9,P1,https://market.tradly.co.ke/wholesale
+73,buy groceries in bulk for business Kenya,Wholesale / Bulk Buying,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+74,wholesale fresh produce market Kenya,Wholesale / Bulk Buying,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+75,bulk fruits supplier Nairobi,Wholesale / Bulk Buying,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/categories/fresh-produce/fruits
+76,wholesale food distributor Kenya,Wholesale / Bulk Buying,Commercial,MOFU,2,2,4,P2,https://market.tradly.co.ke/wholesale
+77,buy vegetables wholesale price Kenya,Wholesale / Bulk Buying,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+78,bulk grocery supplier for supermarkets Kenya,Wholesale / Bulk Buying,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/wholesale
+79,wholesale produce delivery Nairobi,Wholesale / Bulk Buying,Transactional,BOFU,2,3,6,P1,https://market.tradly.co.ke/browse
+80,catering supplies supplier Kenya,Catering & Events Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/caterers
+81,food supplier for events Kenya,Catering & Events Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/caterers
+82,bulk food supply for catering business Kenya,Catering & Events Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/caterers
+83,fresh produce for caterers Nairobi,Catering & Events Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/caterers
+84,wedding and event food supplier Kenya,Catering & Events Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/for/caterers
+85,corporate event catering supplies Kenya,Catering & Events Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/for/caterers
+86,hospital food supplier Kenya,Healthcare / Hospital Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/hospitals
+87,fresh produce supplier for hospitals,Healthcare / Hospital Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/hospitals
+88,medical facility catering supplier Kenya,Healthcare / Hospital Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/hospitals
+89,hospital kitchen food supply Kenya,Healthcare / Hospital Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/hospitals
+90,supply vegetables to hospitals Kenya,Healthcare / Hospital Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/hospitals
+91,healthcare institution procurement supplier Kenya,Healthcare / Hospital Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/for/hospitals
+92,school food supplier Kenya,Education / School Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/schools
+93,boarding school food supplier Kenya,Education / School Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/schools
+94,fresh produce supplier for schools Nairobi,Education / School Supply,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/for/schools
+95,school kitchen vegetable supplier Kenya,Education / School Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/schools
+96,supply food to schools Kenya,Education / School Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/schools
+97,institutional catering supplier for colleges Kenya,Education / School Supply,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/for/schools
+98,school feeding program produce supplier Kenya,Education / School Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/for/schools
+99,bulk food supplier for universities Kenya,Education / School Supply,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/for/schools
+100,corporate fruit hampers Kenya,Corporate Gifting / Staff Welfare,Commercial,MOFU,2,2,4,P2,https://market.tradly.co.ke/corporate-gifting
+101,staff welfare fresh produce Kenya,Corporate Gifting / Staff Welfare,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/corporate-gifting
+102,corporate gifting hampers Nairobi,Corporate Gifting / Staff Welfare,Commercial,MOFU,2,2,4,P2,https://market.tradly.co.ke/corporate-gifting
+103,fruit baskets for offices Kenya,Corporate Gifting / Staff Welfare,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/corporate-gifting
+104,employee welfare food package supplier Kenya,Corporate Gifting / Staff Welfare,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/corporate-gifting
+105,farmer aggregator platform Kenya,Farmer Aggregation / Cooperatives,Supply-side,MOFU,1,2,2,P3,https://market.tradly.co.ke/sell
+106,cooperative produce buyer Kenya,Farmer Aggregation / Cooperatives,Supply-side,MOFU,1,2,2,P3,https://market.tradly.co.ke/sell
+107,off-take agreement for farmers Kenya,Farmer Aggregation / Cooperatives,Supply-side,MOFU,1,2,2,P3,https://market.tradly.co.ke/blog/guaranteed-market-for-farmers-offtake
+108,sell produce to aggregator Kenya,Farmer Aggregation / Cooperatives,Supply-side,MOFU,1,3,3,P2,https://market.tradly.co.ke/sell
+109,guaranteed market for farmers Kenya,Farmer Aggregation / Cooperatives,Informational,TOFU,2,3,6,P1,https://market.tradly.co.ke/blog/guaranteed-market-for-farmers-offtake
+110,cheapest vegetable supplier Nairobi,Price / Cost-saving / Comparison,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+111,compare produce prices suppliers Kenya,Price / Cost-saving / Comparison,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/how-it-works
+112,reduce food procurement costs restaurant,Price / Cost-saving / Comparison,Informational,TOFU,2,3,6,P1,https://market.tradly.co.ke/blog/reduce-food-procurement-costs-restaurant
+113,best price fresh produce supplier Kenya,Price / Cost-saving / Comparison,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/categories/fresh-produce
+114,affordable bulk vegetables Nairobi,Price / Cost-saving / Comparison,Commercial,MOFU,2,3,6,P1,https://market.tradly.co.ke/wholesale
+115,market price vegetables Kenya today,Price / Cost-saving / Comparison,Informational,TOFU,3,2,6,P1,https://market.tradly.co.ke/market-prices
+116,eTIMS compliant supplier Kenya,Compliance / eTIMS / Formal Invoicing,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/etims-compliance
+117,supplier that issues KRA invoice Kenya,Compliance / eTIMS / Formal Invoicing,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/etims-compliance
+118,produce supplier with eTIMS invoice,Compliance / eTIMS / Formal Invoicing,Commercial,MOFU,1,3,3,P2,https://market.tradly.co.ke/etims-compliance
+119,VAT compliant food supplier Kenya,Compliance / eTIMS / Formal Invoicing,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/etims-compliance
+120,registered supplier with tax invoice Kenya,Compliance / eTIMS / Formal Invoicing,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/etims-compliance
+121,Tradly,Branded / Navigational,Navigational,BOFU,2,3,6,P1,https://market.tradly.co.ke/
+122,tradly market,Branded / Navigational,Navigational,BOFU,2,3,6,P1,https://market.tradly.co.ke/
+123,market.tradly.co.ke,Branded / Navigational,Navigational,BOFU,1,3,3,P2,https://market.tradly.co.ke/
+124,Tradly marketplace,Branded / Navigational,Navigational,BOFU,1,3,3,P2,https://market.tradly.co.ke/
+125,Tradly login,Branded / Navigational,Navigational,BOFU,1,3,3,P2,https://market.tradly.co.ke/login
+126,Tradly Kenya produce,Branded / Navigational,Navigational,BOFU,1,3,3,P2,https://market.tradly.co.ke/categories/fresh-produce
+127,Tradly supplier,Branded / Navigational,Navigational,BOFU,1,3,3,P2,https://market.tradly.co.ke/sell
+128,Tradly reviews,Branded / Navigational,Commercial,MOFU,1,2,2,P3,https://market.tradly.co.ke/reviews
+129,is Tradly legit,Branded / Navigational,Informational,MOFU,1,2,2,P3,https://market.tradly.co.ke/reviews
+130,how to source produce for a hotel Kenya,Problem-aware / Informational,Informational,TOFU,1,3,3,P2,https://market.tradly.co.ke/blog/source-produce-for-hotel-kenya
+131,how to find reliable food suppliers Kenya,Problem-aware / Informational,Informational,TOFU,2,3,6,P1,https://market.tradly.co.ke/blog/find-reliable-food-suppliers-restaurant-kenya
+132,how to reduce spoilage in restaurant supply,Problem-aware / Informational,Informational,TOFU,1,2,2,P3,https://market.tradly.co.ke/blog/reduce-spoilage-restaurant-supply-chain
+133,how to buy vegetables directly from farmers,Problem-aware / Informational,Informational,TOFU,2,3,6,P1,https://market.tradly.co.ke/blog/buy-fresh-produce-direct-from-farmers-kenya
+134,best way to procure fresh produce for business,Problem-aware / Informational,Informational,TOFU,1,3,3,P2,https://market.tradly.co.ke/blog/procure-fresh-produce-for-business
+135,how to get consistent produce supply Kenya,Problem-aware / Informational,Informational,TOFU,1,3,3,P2,https://market.tradly.co.ke/blog/consistent-fresh-produce-supply-kenya
+136,how to manage restaurant suppliers Kenya,Problem-aware / Informational,Informational,TOFU,1,2,2,P3,https://market.tradly.co.ke/blog/manage-restaurant-suppliers-kenya
+137,how to sell farm produce to institutions,Problem-aware / Informational,Informational,TOFU,2,3,6,P1,https://market.tradly.co.ke/blog/sell-farm-produce-to-hotels-schools-institutions

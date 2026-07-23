@@ -236,8 +236,9 @@ function Home() {
             </span>
           </div>
           <p className="mb-4 text-[13px] leading-relaxed text-ink-muted lg:text-[14px]">
-            Tradly Market covers Nairobi, Kiambu, Kirinyaga, Murang'a and Embu counties —
-            homes, restaurants, schools and institutions across the zones below.
+            Tradly Market covers Nairobi, Kiambu, Machakos, Kirinyaga, Murang'a, Nyeri,
+            Nyandarua, Embu, Nakuru, Laikipia and Uasin Gishu counties — restaurants, hotels,
+            schools, hospitals and institutions across the zones below.
           </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 lg:gap-4">
             {DELIVERY_ZONES.map((z) => (

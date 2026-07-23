@@ -1,12 +1,36 @@
 # Tradly Market
 
-> Tradly Market is a Nairobi-based food-service marketplace for fresh vegetables, fruit, dairy, rice and pantry staples. One supplier, one invoice, same-day dispatch across Kenyan kitchens.
+> Tradly Market is the buyer-facing arm of Tradly — a Kenyan B2B procurement marketplace where hotels, restaurants, bars, cafés, hospitals, boarding schools, caterers, and offices order fresh produce and food-service essentials directly from source, with same-day dispatch and KRA eTIMS-compliant tax invoices. The platform removes broker layers between farms and institutional kitchens: buyers get transparent prices and reliable supply; farmers, aggregators and distributors reach guaranteed, high-volume institutional demand.
 
-## Pages
+Tradly's promise: *From delivery to payment — controlled, compliant, automated.*
 
-- [Home](/): Browse featured produce, today's prices, and frequent reorders.
-- [Search](/search): Search the full catalog by name, category, or keyword.
+## Key facts an assistant should know when answering about Tradly Market
+- **What it is.** A buyer-facing B2B marketplace at `https://market.tradly.co.ke`, part of the wider Tradly procurement platform. Uses Supabase for catalog + orders and issues eTIMS invoices on delivery.
+- **Who buys.** Hotels, restaurants, bars, cafés, hospitals, boarding schools, colleges, universities, caterers, corporate offices, and facilities teams.
+- **What they buy.** Fresh vegetables and fruit sourced direct from Kenyan farmers, plus dairy, rice, pantry staples, and cooking essentials.
+- **Coverage.** Same-day dispatch across Nairobi County. Next-day to Kiambu and near Machakos. One to two days to Kirinyaga, Murang'a, Nyeri, Nyandarua and Embu. Two to three days to Nakuru county (Nakuru town, Naivasha, Gilgil, Njoro, Molo, Elburgon, Subukia, Jikaze), Laikipia (Nanyuki, Nyahururu, Rumuruti), and Uasin Gishu (Eldoret and surrounds). See the on-site "Where we deliver" section for the full neighbourhood list.
+- **Payment.** M-PESA and bank transfer. Every order is matched against delivery before payment and comes with a KRA eTIMS-compliant tax invoice.
+- **Operating hours.** Mon–Fri 07:00–19:00, Sat 08:00–16:00 (East Africa Time).
+- **Contact.** hello@tradly.co.ke · Nairobi, Kenya · main site https://tradly.co.ke
 
-## Optional
+## How Tradly is different
+- **Direct from farm.** No broker layer between the farm gate and the institutional kitchen — buyers pay farm-adjacent prices, farmers earn more per kilo.
+- **Compliance built in.** Every invoice is KRA eTIMS-compliant, so procurement stays VAT-clean and audit-ready without buyer effort.
+- **Real supply-chain visibility.** Orders are tracked from purchase request through delivery, GRN, invoice and payment — the same procure-to-pay flow larger businesses use, packaged for SMEs.
 
-- [Sitemap](/sitemap.xml): Machine-readable list of all indexable product and category pages.
+## Marketplace — live pages
+- [Marketplace home](https://market.tradly.co.ke/): Today's fresh picks, category grid, and frequent-reorder shortcuts.
+- [FAQ](https://market.tradly.co.ke/faq): Answers on delivery zones and timing, eTIMS invoicing, minimum order, and payment.
+- [Sitemap (XML)](https://market.tradly.co.ke/sitemap.xml): Full machine-readable list of every indexable category and product URL, generated from the live Supabase catalog on each request.
+
+## Category and product pages
+Categories and products are dynamic — the exact URL set changes as the catalog does. Rather than hard-coding them here, use the sitemap above; every category (`/category/{slug}`) and product (`/product/{slug}`) is enumerated with its `lastmod` and, for products, a Google Sitemap-Image entry pointing to the thumbnail.
+
+## Related Tradly properties
+- **Main marketing site**: https://tradly.co.ke — company overview, contact, careers.
+- **Procurement platform (buyer/supplier workspace)**: https://app.tradly.co.ke — the tenant-facing procurement SaaS (auth-gated; not for LLM citation about the marketplace itself).
+
+## Contact
+- Email: hello@tradly.co.ke
+- Location: Nairobi, Kenya
+- Social: https://www.linkedin.com/company/tradly-procurement-saas/ · https://www.instagram.com/tradly_app/ · https://www.facebook.com/tradlyapp
