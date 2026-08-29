@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { GuestSignupBanner } from "@/marketplace/components/GuestSignupBanner";
+import { trackEvent } from "@/lib/analytics";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
@@ -67,6 +70,11 @@ function Home() {
   // Memoize the derived slices so we don't recompute filter/find on every
   // render (e.g. when unrelated state changes elsewhere in the tree).
   const featured = useMemo(() => products.filter((p) => p.isFeatured), [products]);
+  // Fires on mount regardless of auth state — this is the public
+  // catalogue view, and signed-out visits are the ones that matter
+  // most for the funnel.
+  useEffect(() => { trackEvent("market_catalogue_viewed"); }, []);
+
   const todayPrices = useMemo(() => products.slice(0, 8), [products]);
   const frequent = useMemo(() => {
     const freqIds = Array.from(new Set(orders.flatMap((o) => o.lines.map((l) => l.productId))));
@@ -158,6 +166,8 @@ function Home() {
             </div>
           )}
         </section>
+
+        <GuestSignupBanner />
 
         {featured.length > 0 && (
           <section className="pt-10 lg:pt-16">
