@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { initAnalytics } from "@/lib/analytics";
 import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
@@ -101,6 +102,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { title: "Tradly Market — Fresh produce for Kenyan kitchens" },
         { name: "description", content: description },
         { name: "author", content: "Tradly" },
+        // TODO(dennis): paste the content= value from Search Console's
+        // "HTML tag" verification method, then this line goes live.
+        // tradly.co.ke is already verified (see the marketing-suite repo).
+        { name: "google-site-verification", content: "PASTE_TOKEN_HERE" },
         { name: "robots", content: "index, follow, max-image-preview:large, max-snippet:-1" },
         { property: "og:site_name", content: SITE_NAME },
         { property: "og:locale", content: SITE_LOCALE },
@@ -171,6 +176,11 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // Client-only: analytics must not run during SSR, and this must stay in an
+  // effect so it fires once per page load, not per render.
+  useEffect(() => { initAnalytics(); }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
