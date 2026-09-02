@@ -535,6 +535,13 @@ export async function submitMarketplaceOrder(
 export interface BuyerBusiness {
   id: string;
   name: string;
+  /**
+   * Discriminator (company | individual | supplier_vendor). Individuals
+   * are OTP-signed-in buyers who haven't upgraded to a full company
+   * workspace yet — the /account page shows an "Upgrade" CTA for them
+   * that deep-links into tradly-flow's /upgrade wizard (spec §9).
+   */
+  businessType: string | null;
   kraPin: string | null;
   email: string | null;
   phone: string | null;
@@ -547,13 +554,14 @@ export interface BuyerBusiness {
 export async function getMyBusiness(): Promise<BuyerBusiness | null> {
   const { data, error } = await getSupabase()
     .from("businesses")
-    .select("id, name, kra_pin, email, phone, city, address, industry, logo_url")
+    .select("id, name, business_type, kra_pin, email, phone, city, address, industry, logo_url")
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
   return {
     id: data.id as string,
     name: (data.name as string) ?? "",
+    businessType: (data.business_type as string) ?? null,
     kraPin: (data.kra_pin as string) ?? null,
     email: (data.email as string) ?? null,
     phone: (data.phone as string) ?? null,
