@@ -1,9 +1,9 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   MapPin, Receipt, Bell, LogOut, Building2, Mail, Phone,
-  ChevronRight,
+  ChevronRight, Rocket, ArrowUpRight,
 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
@@ -107,6 +107,16 @@ function Account() {
           </div>
         </section>
 
+        {/* Upgrade CTA (individual buyers only) — deep-links into tradly-flow's
+            §9 graduation wizard. business.id doesn't change during upgrade so
+            every order + delivery on this storefront survives.
+            Sub 30: appends the current Supabase refresh_token as a URL
+            FRAGMENT (`#h=...`) so flow can skip the login step. Fragment stays
+            client-side (never in server logs / referrers). */}
+        {business?.businessType === "individual" && (
+          <UpgradeCTA />
+        )}
+
         {/* Quick actions */}
         <section className="mt-4 grid grid-cols-2 gap-3">
           <QuickTile
@@ -183,6 +193,73 @@ function Account() {
         </button>
       </div>
     </AppShell>
+  );
+}
+
+// ─── UpgradeCTA (Sub 30 handoff-aware, Sub 31 cookie-sourced) ──────────
+//
+// Sub 22 was a plain <a href="…/upgrade">. Sub 30 added a short-lived
+// handoff token in the URL fragment so tradly-flow can skip the login
+// step. Sub 31 moves the token off localStorage (XSS-readable) onto an
+// httpOnly cookie — the button now fetches the token from
+// /api/session/handoff on click and navigates programmatically.
+//
+// Fallback: if the fetch 401s (email/password buyer, or session lost) we
+// send the buyer to a plain /upgrade and they sign in on the flow side.
+//
+// URL fragment (not query string): fragments never appear in server logs,
+// Referer headers, or analytics pipes. Same rationale Supabase uses for
+// magic-link tokens.
+function UpgradeCTA() {
+  const flowUrl = import.meta.env.VITE_FLOW_URL ?? "https://app.tradly.co.ke";
+  const [handingOff, setHandingOff] = React.useState(false);
+
+  const onClick = React.useCallback(
+    async (e: React.MouseEvent<HTMLAnchorElement>) => {
+      e.preventDefault();
+      if (handingOff) return;
+      setHandingOff(true);
+      let url = `${flowUrl}/upgrade`;
+      try {
+        const res = await fetch("/api/session/handoff", { credentials: "same-origin" });
+        if (res.ok) {
+          const { refresh_token } = (await res.json()) as { refresh_token?: string };
+          if (refresh_token) {
+            const encoded = btoa(refresh_token).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+            url = `${flowUrl}/upgrade#h=${encoded}`;
+          }
+        }
+      } catch { /* fall through to non-handoff URL */ }
+      window.location.href = url;
+    },
+    [flowUrl, handingOff],
+  );
+
+  return (
+    <section className="mt-5 rounded-2xl border border-trust/30 bg-trust/[0.04] p-5">
+      <div className="flex items-start gap-3">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-trust/15 text-trust">
+          <Rocket className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold text-ink">Upgrade to a workspace</p>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+            Move from an individual buyer account to a company workspace. Unlocks POs,
+            approvals, KRA-compliant invoicing, and lets you invite your team. Your
+            order history stays with you.
+          </p>
+          <a
+            href={`${flowUrl}/upgrade`}
+            onClick={onClick}
+            aria-disabled={handingOff}
+            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-trust hover:underline aria-disabled:opacity-60"
+          >
+            {handingOff ? "Signing you in…" : "Start the upgrade"}
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </div>
+    </section>
   );
 }
 

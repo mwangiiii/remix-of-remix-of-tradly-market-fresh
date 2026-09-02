@@ -27,12 +27,17 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as ProductSlugRouteImport } from './routes/product.$slug'
 import { Route as ListsIdRouteImport } from './routes/lists.$id'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminCategoriesRouteImport } from './routes/admin.categories'
 import { Route as AdminCatalogRouteImport } from './routes/admin.catalog'
 import { Route as OrderIdIndexRouteImport } from './routes/order.$id.index'
 import { Route as OrderIdConfirmationRouteImport } from './routes/order.$id.confirmation'
+import { Route as ApiSessionStoreRouteImport } from './routes/api.session.store'
+import { Route as ApiSessionRefreshRouteImport } from './routes/api.session.refresh'
+import { Route as ApiSessionHandoffRouteImport } from './routes/api.session.handoff'
+import { Route as ApiSessionClearRouteImport } from './routes/api.session.clear'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -124,6 +129,11 @@ const CategorySlugRoute = CategorySlugRouteImport.update({
   path: '/category/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminOrdersRoute = AdminOrdersRouteImport.update({
   id: '/admin/orders',
   path: '/admin/orders',
@@ -154,6 +164,26 @@ const OrderIdConfirmationRoute = OrderIdConfirmationRouteImport.update({
   path: '/order/$id/confirmation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionStoreRoute = ApiSessionStoreRouteImport.update({
+  id: '/api/session/store',
+  path: '/api/session/store',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionRefreshRoute = ApiSessionRefreshRouteImport.update({
+  id: '/api/session/refresh',
+  path: '/api/session/refresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionHandoffRoute = ApiSessionHandoffRouteImport.update({
+  id: '/api/session/handoff',
+  path: '/api/session/handoff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSessionClearRoute = ApiSessionClearRouteImport.update({
+  id: '/api/session/clear',
+  path: '/api/session/clear',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -173,11 +203,16 @@ export interface FileRoutesByFullPath {
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/session/clear': typeof ApiSessionClearRoute
+  '/api/session/handoff': typeof ApiSessionHandoffRoute
+  '/api/session/refresh': typeof ApiSessionRefreshRoute
+  '/api/session/store': typeof ApiSessionStoreRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
   '/order/$id/': typeof OrderIdIndexRoute
 }
@@ -199,11 +234,16 @@ export interface FileRoutesByTo {
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin': typeof AdminIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/api/session/clear': typeof ApiSessionClearRoute
+  '/api/session/handoff': typeof ApiSessionHandoffRoute
+  '/api/session/refresh': typeof ApiSessionRefreshRoute
+  '/api/session/store': typeof ApiSessionStoreRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
   '/order/$id': typeof OrderIdIndexRoute
 }
@@ -226,11 +266,16 @@ export interface FileRoutesById {
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/category/$slug': typeof CategorySlugRoute
   '/lists/$id': typeof ListsIdRoute
   '/product/$slug': typeof ProductSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/session/clear': typeof ApiSessionClearRoute
+  '/api/session/handoff': typeof ApiSessionHandoffRoute
+  '/api/session/refresh': typeof ApiSessionRefreshRoute
+  '/api/session/store': typeof ApiSessionStoreRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
   '/order/$id/': typeof OrderIdIndexRoute
 }
@@ -254,11 +299,16 @@ export interface FileRouteTypes {
     | '/admin/categories'
     | '/admin/inventory'
     | '/admin/orders'
+    | '/auth/callback'
     | '/category/$slug'
     | '/lists/$id'
     | '/product/$slug'
     | '/admin/'
     | '/lists/'
+    | '/api/session/clear'
+    | '/api/session/handoff'
+    | '/api/session/refresh'
+    | '/api/session/store'
     | '/order/$id/confirmation'
     | '/order/$id/'
   fileRoutesByTo: FileRoutesByTo
@@ -280,11 +330,16 @@ export interface FileRouteTypes {
     | '/admin/categories'
     | '/admin/inventory'
     | '/admin/orders'
+    | '/auth/callback'
     | '/category/$slug'
     | '/lists/$id'
     | '/product/$slug'
     | '/admin'
     | '/lists'
+    | '/api/session/clear'
+    | '/api/session/handoff'
+    | '/api/session/refresh'
+    | '/api/session/store'
     | '/order/$id/confirmation'
     | '/order/$id'
   id:
@@ -306,11 +361,16 @@ export interface FileRouteTypes {
     | '/admin/categories'
     | '/admin/inventory'
     | '/admin/orders'
+    | '/auth/callback'
     | '/category/$slug'
     | '/lists/$id'
     | '/product/$slug'
     | '/admin/'
     | '/lists/'
+    | '/api/session/clear'
+    | '/api/session/handoff'
+    | '/api/session/refresh'
+    | '/api/session/store'
     | '/order/$id/confirmation'
     | '/order/$id/'
   fileRoutesById: FileRoutesById
@@ -333,11 +393,16 @@ export interface RootRouteChildren {
   AdminCategoriesRoute: typeof AdminCategoriesRoute
   AdminInventoryRoute: typeof AdminInventoryRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   CategorySlugRoute: typeof CategorySlugRoute
   ListsIdRoute: typeof ListsIdRoute
   ProductSlugRoute: typeof ProductSlugRoute
   AdminIndexRoute: typeof AdminIndexRoute
   ListsIndexRoute: typeof ListsIndexRoute
+  ApiSessionClearRoute: typeof ApiSessionClearRoute
+  ApiSessionHandoffRoute: typeof ApiSessionHandoffRoute
+  ApiSessionRefreshRoute: typeof ApiSessionRefreshRoute
+  ApiSessionStoreRoute: typeof ApiSessionStoreRoute
   OrderIdConfirmationRoute: typeof OrderIdConfirmationRoute
   OrderIdIndexRoute: typeof OrderIdIndexRoute
 }
@@ -470,6 +535,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CategorySlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/orders': {
       id: '/admin/orders'
       path: '/admin/orders'
@@ -512,6 +584,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrderIdConfirmationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/session/store': {
+      id: '/api/session/store'
+      path: '/api/session/store'
+      fullPath: '/api/session/store'
+      preLoaderRoute: typeof ApiSessionStoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/refresh': {
+      id: '/api/session/refresh'
+      path: '/api/session/refresh'
+      fullPath: '/api/session/refresh'
+      preLoaderRoute: typeof ApiSessionRefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/handoff': {
+      id: '/api/session/handoff'
+      path: '/api/session/handoff'
+      fullPath: '/api/session/handoff'
+      preLoaderRoute: typeof ApiSessionHandoffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/session/clear': {
+      id: '/api/session/clear'
+      path: '/api/session/clear'
+      fullPath: '/api/session/clear'
+      preLoaderRoute: typeof ApiSessionClearRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -533,11 +633,16 @@ const rootRouteChildren: RootRouteChildren = {
   AdminCategoriesRoute: AdminCategoriesRoute,
   AdminInventoryRoute: AdminInventoryRoute,
   AdminOrdersRoute: AdminOrdersRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   CategorySlugRoute: CategorySlugRoute,
   ListsIdRoute: ListsIdRoute,
   ProductSlugRoute: ProductSlugRoute,
   AdminIndexRoute: AdminIndexRoute,
   ListsIndexRoute: ListsIndexRoute,
+  ApiSessionClearRoute: ApiSessionClearRoute,
+  ApiSessionHandoffRoute: ApiSessionHandoffRoute,
+  ApiSessionRefreshRoute: ApiSessionRefreshRoute,
+  ApiSessionStoreRoute: ApiSessionStoreRoute,
   OrderIdConfirmationRoute: OrderIdConfirmationRoute,
   OrderIdIndexRoute: OrderIdIndexRoute,
 }

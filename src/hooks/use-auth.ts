@@ -14,5 +14,9 @@ export function useAuth() {
     login: ctx.login,
     signup: ctx.signup,
     logout: ctx.logout,
+    // Magic link (spec §8 individual buyer flow, wired 2026-08-02 —
+    // replaces the earlier phone OTP approach; strict decision by product).
+    sendMagicLink: ctx.sendMagicLink,
+    completeMagicLink: ctx.completeMagicLink,
   };
 }
