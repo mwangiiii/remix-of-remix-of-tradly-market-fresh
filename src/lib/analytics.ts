@@ -59,3 +59,21 @@ export function trackEvent(eventName: string, params?: GAEventParams): void {
   if (typeof window.gtag !== "function") return;
   window.gtag("event", eventName, params);
 }
+
+/**
+ * SPA page_view. gtag("config") fires one page_view on load, but TanStack
+ * Router navigations are client-side and send nothing — without this, GA4 sees
+ * landing pages only and every internal step of the funnel is invisible.
+ *
+ * Callers must skip the FIRST path: config() already reported it, and firing
+ * again would double-count the landing page.
+ */
+export function trackPageView(path: string): void {
+  if (typeof window === "undefined") return;
+  if (typeof window.gtag !== "function") return;
+  window.gtag("event", "page_view", {
+    page_path: path,
+    page_location: window.location.href,
+    page_title: typeof document !== "undefined" ? document.title : undefined,
+  });
+}

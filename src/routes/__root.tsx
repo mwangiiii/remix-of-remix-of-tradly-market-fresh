@@ -6,9 +6,10 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  useRouterState,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
-import { initAnalytics } from "@/lib/analytics";
+import { useEffect, useRef, type ReactNode } from "react";
+import { initAnalytics, trackPageView } from "@/lib/analytics";
 import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
@@ -180,6 +181,15 @@ function RootComponent() {
   // Client-only: analytics must not run during SSR, and this must stay in an
   // effect so it fires once per page load, not per render.
   useEffect(() => { initAnalytics(); }, []);
+
+  // gtag("config") already reported the landing path, so skip the first one
+  // here or it is counted twice.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isFirstPath = useRef(true);
+  useEffect(() => {
+    if (isFirstPath.current) { isFirstPath.current = false; return; }
+    trackPageView(pathname);
+  }, [pathname]);
 
   return (
     <QueryClientProvider client={queryClient}>
