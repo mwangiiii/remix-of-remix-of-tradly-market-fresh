@@ -8,10 +8,28 @@ import {
   adminUpsertCategory,
   adminDeleteCategory,
   adminListProducts,
+  type AdminCategory,
   type CategoryInput,
 } from "../marketplace/api/adminCatalog";
 import { RequireAdmin } from "@/components/RequireAdmin";
-import type { MarketplaceCategory } from "../marketplace/types/marketplace";
+import type {
+  MarketplaceRoundingRule,
+  MarketplaceTaxTreatment,
+} from "../marketplace/types/marketplace";
+
+const ROUNDING_LABEL: Record<MarketplaceRoundingRule, string> = {
+  exact: "Exact (2 dp)",
+  nearest_1: "Nearest 1",
+  nearest_5: "Nearest 5",
+  nearest_10: "Nearest 10",
+  charm_down: "Charm (…95)",
+};
+
+const TAX_LABEL: Record<MarketplaceTaxTreatment, string> = {
+  exempt: "Exempt",
+  zero_rated: "Zero-rated",
+  standard: "Standard",
+};
 
 export const Route = createFileRoute("/admin/categories")({
   head: () => ({ meta: [{ title: "Categories — Tradly Admin" }, { name: "robots", content: "noindex" }] }),
@@ -62,11 +80,30 @@ function CategoriesAdmin() {
     onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
   });
 
-  const start = (c?: MarketplaceCategory) =>
+  const start = (c?: AdminCategory) =>
     setDraft(
       c
-        ? { id: c.id, name: c.name, slug: c.slug, parentId: c.parentId, displayOrder: c.displayOrder, isActive: true }
-        : { name: "", slug: "", parentId: null, displayOrder: categories.length + 1, isActive: true },
+        ? {
+            id: c.id,
+            name: c.name,
+            slug: c.slug,
+            parentId: c.parentId,
+            displayOrder: c.displayOrder,
+            isActive: c.isActive,
+            defaultMarkupPct: c.defaultMarkupPct,
+            defaultTaxTreatment: c.defaultTaxTreatment,
+            defaultRoundingRule: c.defaultRoundingRule,
+          }
+        : {
+            name: "",
+            slug: "",
+            parentId: null,
+            displayOrder: categories.length + 1,
+            isActive: true,
+            defaultMarkupPct: null,
+            defaultTaxTreatment: null,
+            defaultRoundingRule: "nearest_5",
+          },
     );
 
   return (
@@ -137,6 +174,79 @@ function CategoriesAdmin() {
                 <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">Display order</span>
                 <input type="number" value={draft.displayOrder} onChange={(e) => setDraft({ ...draft, displayOrder: Number(e.target.value) || 0 })} className="mt-1 w-full rounded-lg border border-divider bg-background px-3 py-2 text-[14px]" />
               </label>
+
+              {/* ── Pricing engine defaults (spec §5) ─────────────────────
+                  These flow into fn_marketplace_resolve_defaults and are the
+                  fallback for every product in this category that doesn't
+                  override its own markup. Leaving markup blank inherits from
+                  the parent category and ultimately the platform 25%. */}
+              <div className="mt-4 rounded-xl border border-divider bg-background/60 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  Pricing defaults
+                </p>
+                <p className="mt-1 text-[11.5px] leading-relaxed text-ink-muted">
+                  Products in this category inherit these unless they override.
+                  Blank markup = inherit from parent, then platform (25%).
+                </p>
+
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                      Default markup %
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={draft.defaultMarkupPct ?? ""}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          defaultMarkupPct: e.target.value === "" ? null : Number(e.target.value),
+                        })
+                      }
+                      placeholder="inherit"
+                      className="mt-1 w-full rounded-lg border border-divider bg-background px-3 py-2 text-[14px]"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                      Rounding
+                    </span>
+                    <select
+                      value={draft.defaultRoundingRule ?? "nearest_5"}
+                      onChange={(e) =>
+                        setDraft({ ...draft, defaultRoundingRule: e.target.value as MarketplaceRoundingRule })
+                      }
+                      className="mt-1 w-full rounded-lg border border-divider bg-background px-3 py-2 text-[14px]"
+                    >
+                      {(Object.keys(ROUNDING_LABEL) as MarketplaceRoundingRule[]).map((r) => (
+                        <option key={r} value={r}>{ROUNDING_LABEL[r]}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="mt-3 block">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-ink-muted">
+                    Default tax treatment
+                  </span>
+                  <select
+                    value={draft.defaultTaxTreatment ?? ""}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        defaultTaxTreatment: e.target.value === "" ? null : (e.target.value as MarketplaceTaxTreatment),
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-divider bg-background px-3 py-2 text-[14px]"
+                  >
+                    <option value="">Inherit (falls back to Exempt)</option>
+                    {(Object.keys(TAX_LABEL) as MarketplaceTaxTreatment[]).map((t) => (
+                      <option key={t} value={t}>{TAX_LABEL[t]}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={() => setDraft(null)} className="rounded-full border border-divider px-4 py-2 text-[13px] font-semibold text-ink">Cancel</button>

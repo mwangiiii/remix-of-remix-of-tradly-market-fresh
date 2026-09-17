@@ -109,19 +109,14 @@ const TRADLY_SOCIALS: string[] = [
 // Ordered by delivery-hub proximity to the Nairobi depot, which mirrors
 // how the ops team plans routes: metro first, then central corridor, then
 // the Rift Valley + highlands loop.
-const SERVED_COUNTIES = [
-  "Nairobi",
-  "Kiambu",
-  "Machakos",
-  "Kirinyaga",
-  "Murang'a",
-  "Nyeri",
-  "Nyandarua",
-  "Embu",
-  "Nakuru",
-  "Laikipia",
-  "Uasin Gishu",
-] as const;
+// Household Commerce launch scope (spec §7.2): Nairobi only. Broader county
+// claims (Kiambu, Machakos, Kirinyaga, Murang'a, Nyeri, Nyandarua, Embu,
+// Nakuru, Laikipia, Uasin Gishu) were removed at launch to stop
+// over-promising in schema and copy — those coverage areas were aspirational
+// and don't reflect the rider network. Re-add counties here (and rebuild
+// SERVICE_GEO's radius) as ops confirms new zones — the marketplace_delivery_
+// zones table added in Checkpoint D is the authoritative runtime source.
+const SERVED_COUNTIES = ["Nairobi"] as const;
 
 function servedCountyLd(name: string) {
   return {
@@ -131,12 +126,10 @@ function servedCountyLd(name: string) {
   };
 }
 
-// Practical delivery radius. Centred on Nairobi CBD; 350 km reaches
-// Eldoret to the north-west, Nanyuki + Isiolo edge to the north, and Embu
-// to the east — covers every county in SERVED_COUNTIES. The circle is
-// belt-and-braces for "near me" queries; SERVED_COUNTIES is what Google
-// actually keys off for county-level relevance.
-const DELIVERY_RADIUS_METRES = 350_000;
+// Nairobi metro radius — 25 km from CBD covers Ruaka / Karen / Ruiru-edge.
+// Was 350 km (all-of-central-Kenya) pre-launch; shrunk to match the eight
+// launch delivery zones from spec §7.2.
+const DELIVERY_RADIUS_METRES = 25_000;
 
 const SERVICE_GEO = {
   "@type": "GeoCircle",
@@ -258,11 +251,11 @@ export function websiteLd() {
 export const FAQ_ITEMS: Array<{ q: string; a: string }> = [
   {
     q: "Where does Tradly Market deliver?",
-    a: "Tradly delivers across Nairobi and Kiambu (Ruiru, Juja, Kikuyu, Kahawa Sukari/West/Wendani, Northlands, Membly, Kiambu town, Limuru), the Athi River corridor and greater Machakos (Kitengela, Mlolongo, Syokimau, JKIA, Konza, Machakos town, Kangundo, Tala), the Thika–Central corridor (Makuyu, Kenol, Makutano, Murang'a, Kirinyaga's Kagio/Sagana/Baricho, Embu), the highland loop through Nyeri (Nyeri town, Karatina, Mweiga), Nyandarua (Ol Kalou, Engineer, Njabini, Wiyumiririe), and Laikipia (Nanyuki, Nyahururu, Rumuruti), Nakuru county (Nakuru town, Naivasha, Gilgil, Njoro, Molo, Elburgon, Subukia, Jikaze), and out to Uasin Gishu (Eldoret and its surrounds) — and to institutions inside all of those areas.",
+    a: "Tradly delivers across Nairobi — Kilimani, Kileleshwa, Lavington, Westlands, Parklands, Upper Hill, South B, South C, Eastlands (Buruburu, Donholm, Umoja, Embakasi), Kasarani, Roysambu, Karen, Langata, Runda, Muthaiga, Ruaka and Banana. Customers outside our rider zones can arrange a courier or self-pickup at checkout. Coverage expands as we add zones — the storefront always shows current, live coverage.",
   },
   {
     q: "How fast does Tradly Market deliver?",
-    a: "Orders placed before 3 p.m. are dispatched the same day and typically delivered by end of day within Nairobi. Kiambu and near Machakos land next day. Kirinyaga, Murang'a, Nyeri, Nyandarua and Embu land within one to two days. Nakuru county (Nakuru, Naivasha, Gilgil, Elburgon, Subukia), Laikipia (Nanyuki, Nyahururu) and Uasin Gishu (Eldoret) land within two to three days depending on distance from the Nairobi depot.",
+    a: "Orders placed before the zone cutoff (12–2 p.m. depending on distance from the hub) are dispatched the same day and typically delivered by end of day. Orders after cutoff land the next available day. You can also schedule a specific delivery day at checkout.",
   },
   {
     q: "Do I get a KRA-compliant invoice?",
@@ -278,186 +271,43 @@ export const FAQ_ITEMS: Array<{ q: string; a: string }> = [
   },
 ];
 
-// Delivery zones, grouped so both the schema-side FAQ and the on-page
-// "Where we deliver" section can render from a single source. Neighbourhood
-// text is what powers long-tail search ("grocery delivery kileleshwa") so
-// this list is intentionally comprehensive rather than tidy.
+// Household Commerce launch zones (spec §7.2). This is the hardcoded SEO
+// mirror of marketplace_delivery_zones (added in Checkpoint D). When the
+// zones table exists at runtime, ops can edit fees/areas without a code
+// change; this list here is the SEO surface, updated by a code push each
+// time a new zone launches. Kept hand-edited on purpose (spec C3 option b).
 export const DELIVERY_ZONES: Array<{ zone: string; places: string[] }> = [
   {
-    zone: "Nairobi CBD & central",
-    places: [
-      "Nairobi CBD",
-      "Moi Avenue",
-      "Kenyatta Avenue",
-      "Haile Selassie",
-      "Kirinyaga Road",
-      "Museum Hill",
-      "Desai Road",
-      "Upper Hill",
-      "Capital Centre",
-      "Railways",
-      "SGR",
-      "Cabanas",
-      "Nyayo",
-    ],
+    zone: "Kilimani & Kileleshwa",
+    places: ["Kilimani", "Kileleshwa", "Hurlingham", "Yaya"],
   },
   {
-    zone: "Nairobi west & suburbs",
-    places: [
-      "Westlands",
-      "Parklands",
-      "Spring Valley",
-      "Lavington",
-      "Kileleshwa",
-      "Hurlingham",
-      "Karen",
-      "Ngong",
-      "Langata",
-      "Nairobi West",
-      "South B",
-      "South C",
-    ],
+    zone: "Lavington & Westlands",
+    places: ["Lavington", "Westlands", "Parklands", "Riverside", "Spring Valley"],
   },
   {
-    zone: "Nairobi east & north",
-    places: [
-      "Buruburu",
-      "Donholm",
-      "Muthaiga",
-      "Pangani",
-      "Eastleigh",
-      "Outer Ring Road",
-      "Roysambu",
-      "Zimmerman",
-      "Mirema",
-      "Garden City",
-      "Mountain Mall (TRM)",
-      "Thika Road estates",
-    ],
+    zone: "Upper Hill & South",
+    places: ["Upper Hill", "South B", "South C", "Nairobi West"],
   },
   {
-    zone: "Kiambu — Ruiru & Thika Road corridor",
-    places: [
-      "Ruiru",
-      "Northlands",
-      "Membly",
-      "Juja",
-      "Kahawa Sukari",
-      "Kahawa West",
-      "Kahawa Wendani",
-      "Kiambu town",
-      "Limuru",
-    ],
+    zone: "Eastlands",
+    places: ["Buruburu", "Donholm", "Umoja", "Embakasi"],
   },
   {
-    zone: "Machakos — Athi River corridor & greater Machakos",
-    places: [
-      "Athi River",
-      "Kitengela",
-      "Mlolongo",
-      "Syokimau",
-      "JKIA & Airport Road",
-      "Southern Bypass entrances",
-      "Konza Technopolis",
-      "Machakos town",
-      "Katumani",
-      "Kangundo",
-      "Tala",
-      "Mwala",
-    ],
+    zone: "Kasarani & Roysambu",
+    places: ["Kasarani", "Roysambu", "Thome", "Zimmerman"],
   },
   {
-    zone: "Thika corridor to Central Kenya",
-    places: [
-      "Makuyu",
-      "Kenol",
-      "Kakuzi",
-      "Makutano",
-      "Murang'a town",
-      "Kirinyaga (Kagio, Sagana, Baricho)",
-      "Embu",
-    ],
+    zone: "Karen & Langata",
+    places: ["Karen", "Langata", "Ngong Road"],
   },
   {
-    zone: "Nyeri — the coffee belt",
-    places: [
-      "Nyeri town",
-      "Ruring'u",
-      "Karatina",
-      "Kiganjo",
-      "Mweiga",
-      "Othaya",
-      "Chaka",
-      "Naromoru",
-    ],
+    zone: "Runda & Kiambu Road",
+    places: ["Runda", "Muthaiga", "Thindigua", "Ridgeways"],
   },
   {
-    zone: "Nyandarua — the Aberdares & Ol Kalou basin",
-    places: [
-      "Ol Kalou",
-      "Engineer",
-      "Njabini",
-      "Wanjohi",
-      "Kipipiri",
-      "Wiyumiririe",
-      "Ndaragwa",
-      "Miharati",
-    ],
-  },
-  {
-    zone: "Laikipia — Nanyuki & Nyahururu",
-    places: [
-      "Nanyuki",
-      "Timau",
-      "Nyahururu",
-      "Rumuruti",
-      "Kinamba",
-      "Doldol",
-    ],
-  },
-  {
-    zone: "Nakuru — Naivasha, Gilgil & the Molo highlands",
-    places: [
-      "Naivasha",
-      "Karagita",
-      "Kihoto",
-      "Gilgil",
-      "Kikopey",
-      "Nakuru town",
-      "Milimani",
-      "Section 58",
-      "Freehold",
-      "Lanet",
-      "Bahati",
-      "Dundori",
-      "Njoro",
-      "Egerton",
-      "Kabarak",
-      "Molo",
-      "Elburgon",
-      "Turi",
-      "Subukia",
-      "Kabatini",
-      "Solai",
-      "Jikaze",
-    ],
-  },
-  {
-    zone: "Uasin Gishu — Eldoret & surrounds",
-    places: [
-      "Eldoret CBD",
-      "Kapsoya",
-      "Kimumu",
-      "West Indies",
-      "Elgon View",
-      "Langas",
-      "Pioneer",
-      "Turbo",
-      "Moiben",
-      "Kesses",
-      "Burnt Forest",
-      "Ainabkoi",
-    ],
+    zone: "Ruaka & Banana",
+    places: ["Ruaka", "Banana", "Ndenderu"],
   },
 ];
 
@@ -593,67 +443,40 @@ function priceValidUntil(): string {
 }
 
 /**
- * Shipping details — enables the "free delivery" / "delivers in N days"
- * chips in Google Shopping cards. Three zones matching the ops team's
- * actual coverage:
- *   1. Metro same/next-day — Nairobi, Kiambu, near Machakos (incl. Konza & Athi River)
- *   2. Central corridor 1–2 days — Kirinyaga, Murang'a, Nyeri, Nyandarua, Embu
- *   3. Rift & highlands 2–3 days — Nakuru (Nakuru town, Naivasha, Gilgil, Njoro,
- *      Molo, Elburgon, Subukia, Jikaze), Laikipia (Nanyuki, Nyahururu, Rumuruti),
- *      Uasin Gishu (Eldoret and surrounds)
- * Rate is 0 because Tradly bundles fulfilment into the invoice.
+ * Shipping details — enables the "delivers in N days" chip in Google
+ * Shopping cards. Household Commerce launch is Nairobi-only (spec §7.2),
+ * so we advertise one zone: same-day dispatch before zone cutoff, next
+ * day after. Delivery fee varies by zone; schema-side we omit rate rather
+ * than lie about it (fee comes from marketplace_delivery_zones at
+ * runtime, Checkpoint D).
+ *
+ * Add more shippingDestination entries here as ops launches new zones.
  */
 function shippingDetails() {
-  const rate = {
-    "@type": "MonetaryAmount",
-    value: "0",
-    currency: "KES",
-  } as const;
-
-  const zone = (
-    region: string | undefined,
-    handling: [number, number],
-    transit: [number, number],
-  ) => ({
-    "@type": "OfferShippingDetails",
-    shippingRate: rate,
-    shippingDestination: region
-      ? { "@type": "DefinedRegion", addressCountry: "KE", addressRegion: region }
-      : { "@type": "DefinedRegion", addressCountry: "KE" },
-    deliveryTime: {
-      "@type": "ShippingDeliveryTime",
-      handlingTime: {
-        "@type": "QuantitativeValue",
-        minValue: handling[0],
-        maxValue: handling[1],
-        unitCode: "DAY",
+  return [
+    {
+      "@type": "OfferShippingDetails",
+      shippingDestination: {
+        "@type": "DefinedRegion",
+        addressCountry: "KE",
+        addressRegion: "Nairobi",
       },
-      transitTime: {
-        "@type": "QuantitativeValue",
-        minValue: transit[0],
-        maxValue: transit[1],
-        unitCode: "DAY",
+      deliveryTime: {
+        "@type": "ShippingDeliveryTime",
+        handlingTime: {
+          "@type": "QuantitativeValue",
+          minValue: 0,
+          maxValue: 0,
+          unitCode: "DAY",
+        },
+        transitTime: {
+          "@type": "QuantitativeValue",
+          minValue: 0,
+          maxValue: 1,
+          unitCode: "DAY",
+        },
       },
     },
-  });
-
-  return [
-    // Metro same-day / next-day
-    zone("Nairobi", [0, 0], [0, 1]),
-    zone("Kiambu", [0, 0], [1, 1]),
-    zone("Machakos", [0, 0], [1, 2]),
-    // Central corridor 1-2 days
-    zone("Kirinyaga", [0, 1], [1, 2]),
-    zone("Murang'a", [0, 1], [1, 2]),
-    zone("Nyeri", [0, 1], [1, 2]),
-    zone("Nyandarua", [0, 1], [1, 2]),
-    zone("Embu", [0, 1], [1, 2]),
-    // Rift Valley + highlands loop 2-3 days
-    zone("Nakuru", [0, 1], [2, 3]),
-    zone("Laikipia", [0, 1], [2, 3]),
-    zone("Uasin Gishu", [0, 1], [2, 4]),
-    // Fallback for KE addresses in served-but-unlisted counties
-    zone(undefined, [0, 1], [1, 3]),
   ];
 }
 
@@ -678,19 +501,47 @@ export function productLd(product: MarketplaceProduct, category?: MarketplaceCat
   const shipping = shippingDetails();
   const returns = merchantReturnPolicy();
 
-  const offers = product.units.map((u) => ({
-    "@type": "Offer",
-    sku: u.id,
-    price: u.priceKes.toFixed(2),
-    priceCurrency: "KES",
-    availability: schemaAvailability(u.availability),
-    url: siteUrl(`/product/${product.slug}`),
-    itemCondition: "https://schema.org/NewCondition",
-    priceValidUntil: validUntil,
-    hasMerchantReturnPolicy: returns,
-    shippingDetails: shipping,
-    eligibleQuantity: u.moq ? { "@type": "QuantitativeValue", minValue: u.moq } : undefined,
-  }));
+  // Pricing engine (spec §5): the product's shelf price is the single
+  // currentPrice row from marketplace_price_versions. When present, we
+  // emit a single Offer for it. If the product hasn't been priced in the
+  // new engine yet (edge case — storefront queries filter these out
+  // upstream, but productLd can also be invoked from admin/tests), fall
+  // back to the legacy per-unit offers so JSON-LD stays present.
+  const useCurrentPrice = product.currentPrice != null;
+  const availability = product.units[0]?.availability ?? "available";
+
+  const offers = useCurrentPrice
+    ? [
+        {
+          "@type": "Offer" as const,
+          sku: product.id,
+          price: product.currentPrice!.shelfRateKes.toFixed(2),
+          priceCurrency: "KES",
+          availability: schemaAvailability(availability),
+          url: siteUrl(`/product/${product.slug}`),
+          itemCondition: "https://schema.org/NewCondition",
+          priceValidUntil: validUntil,
+          hasMerchantReturnPolicy: returns,
+          shippingDetails: shipping,
+          eligibleQuantity:
+            product.minQty > 1
+              ? { "@type": "QuantitativeValue", minValue: product.minQty }
+              : undefined,
+        },
+      ]
+    : product.units.map((u) => ({
+        "@type": "Offer" as const,
+        sku: u.id,
+        price: u.priceKes.toFixed(2),
+        priceCurrency: "KES",
+        availability: schemaAvailability(u.availability),
+        url: siteUrl(`/product/${product.slug}`),
+        itemCondition: "https://schema.org/NewCondition",
+        priceValidUntil: validUntil,
+        hasMerchantReturnPolicy: returns,
+        shippingDetails: shipping,
+        eligibleQuantity: u.moq ? { "@type": "QuantitativeValue", minValue: u.moq } : undefined,
+      }));
 
   const images = product.media?.length
     ? product.media.filter((m) => m.kind === "image").map((m) => m.url)

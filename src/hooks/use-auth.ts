@@ -11,6 +11,11 @@ export function useAuth() {
     isLoading: ctx.isLoading,
     error: ctx.error,
     buyer: ctx.buyer,
+    // Convenience flag consumed by TopNav + /account to surface the /admin
+    // entry point. Keeping the role string check in one place so any future
+    // role rename (e.g. platform_super_admin → platform_admin) only touches
+    // this file plus RequireAdmin.
+    isPlatformSuperAdmin: ctx.isAuthenticated && ctx.buyer?.role === "platform_super_admin",
     login: ctx.login,
     signup: ctx.signup,
     logout: ctx.logout,

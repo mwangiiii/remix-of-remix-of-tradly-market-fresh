@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ShoppingCart, Bell, User } from "lucide-react";
+import { ShoppingCart, Bell, User, ShieldCheck } from "lucide-react";
 import { useCartStore, cartCount } from "../store/cartStore";
+import { useAuth } from "@/hooks/use-auth";
 import { Wordmark } from "./BrowseHeader";
 
 const links: { to: string; label: string }[] = [
@@ -16,6 +17,7 @@ export function TopNav() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const lines = useCartStore((s) => s.lines);
   const count = cartCount(lines);
+  const { isPlatformSuperAdmin } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 hidden border-b border-divider bg-background/85 backdrop-blur-xl lg:block">
@@ -42,6 +44,24 @@ export function TopNav() {
         </nav>
 
         <div className="ml-auto flex items-center gap-1">
+          {/* Admin entry point for platform_super_admin JWTs. Hidden for
+              customers, so the only way to see this pill is to actually
+              hold the role. Discoverable without being intrusive — a
+              newly-provisioned super admin sees it the moment they land. */}
+          {isPlatformSuperAdmin && (
+            <Link
+              to="/admin"
+              className={`mr-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                pathname.startsWith("/admin")
+                  ? "bg-trust-deep text-trust-deep-foreground"
+                  : "border border-trust-deep/40 text-trust-deep hover:bg-trust-deep/10"
+              }`}
+              title="Tradly platform admin"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" strokeWidth={2} />
+              Admin
+            </Link>
+          )}
           <Link
             to="/notifications"
             className="grid h-9 w-9 place-items-center rounded-full text-ink-muted hover:bg-muted hover:text-ink"

@@ -1,18 +1,32 @@
 import { createFileRoute, Link, notFound, useRouter, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import {
-  ArrowLeft, FileText, PackageCheck, ReceiptText, CircleDollarSign, Check, XCircle, Clock, RotateCcw, Ban,
+  ArrowLeft, FileText, PackageCheck, ReceiptText, CircleDollarSign, Check, XCircle, Clock, RotateCcw, Ban, Truck, Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "../marketplace/components/AppShell";
 import { StatusBadge } from "../marketplace/components/StatusBadge";
 import { getOrder, updateOrderStatus } from "../marketplace/api/marketplaceApi";
+import {
+  cancelConsumerOrder,
+  getConsumerOrder,
+} from "../marketplace/api/consumerOrders";
 import { formatKes } from "../marketplace/lib/format";
 import { useCartStore } from "../marketplace/store/cartStore";
-import type { MarketplaceOrder, OrderStatus } from "../marketplace/types/marketplace";
+import type {
+  ConsumerOrder,
+  ConsumerOrderStatus,
+  MarketplaceOrder,
+  TenantOrderStatus,
+} from "../marketplace/types/marketplace";
 
-const CANCELLABLE: OrderStatus[] = ["draft", "pending_approval", "approved"];
+const CANCELLABLE: TenantOrderStatus[] = ["draft", "pending_approval", "approved"];
+
+type LoadedOrder =
+  | { kind: "consumer"; order: ConsumerOrder }
+  | { kind: "tenant"; order: MarketplaceOrder };
 
 export const Route = createFileRoute("/order/$id/")({
   head: () => ({
@@ -21,10 +35,17 @@ export const Route = createFileRoute("/order/$id/")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  loader: async ({ params }) => {
-    const order = await getOrder(params.id);
-    if (!order) throw notFound();
-    return { order };
+  loader: async ({ params }): Promise<LoadedOrder> => {
+    // Household Commerce spec §9: consumer orders live in a separate table.
+    // Query both in parallel; whichever the caller actually owns (per RLS)
+    // returns a row. Consumer preferred when both somehow exist.
+    const [consumer, tenant] = await Promise.all([
+      getConsumerOrder(params.id).catch(() => null),
+      getOrder(params.id).catch(() => undefined),
+    ]);
+    if (consumer) return { kind: "consumer", order: consumer };
+    if (tenant)   return { kind: "tenant",   order: tenant };
+    throw notFound();
   },
   notFoundComponent: NotFound,
   errorComponent: ({ error }) => (
@@ -32,6 +53,12 @@ export const Route = createFileRoute("/order/$id/")({
   ),
   component: OrderDetail,
 });
+
+function OrderDetail() {
+  const loaded = Route.useLoaderData() as LoadedOrder;
+  if (loaded.kind === "consumer") return <ConsumerOrderView order={loaded.order} />;
+  return <TenantOrderView order={loaded.order} />;
+}
 
 function NotFound() {
   return (
@@ -44,16 +71,16 @@ function NotFound() {
   );
 }
 
-/** Ordered lifecycle stages a customer sees. */
-const LIFECYCLE: { key: OrderStatus; label: string; description: string; icon: typeof FileText }[] = [
+/** Ordered lifecycle stages a tenant customer sees. */
+const LIFECYCLE: { key: TenantOrderStatus; label: string; description: string; icon: typeof FileText }[] = [
   { key: "po_generated", label: "PO Generated",  description: "Purchase order sent to Tradly", icon: FileText },
   { key: "delivered",    label: "Delivered / GRN", description: "Goods received, stock updated", icon: PackageCheck },
   { key: "invoiced",     label: "Invoiced",      description: "Invoice issued for the shipment", icon: ReceiptText },
   { key: "paid",         label: "Paid",          description: "Payment settled", icon: CircleDollarSign },
 ];
 
-/** Which lifecycle steps are considered completed for the current status. */
-function reachedIndex(status: OrderStatus): number {
+/** Which tenant-lifecycle steps are considered completed. */
+function reachedIndex(status: TenantOrderStatus): number {
   switch (status) {
     case "draft":
     case "pending_approval":
@@ -66,8 +93,7 @@ function reachedIndex(status: OrderStatus): number {
   }
 }
 
-function OrderDetail() {
-  const { order } = Route.useLoaderData() as { order: MarketplaceOrder };
+function TenantOrderView({ order }: { order: MarketplaceOrder }) {
   const cancelled = order.status === "cancelled";
   const reached = reachedIndex(order.status);
   const canCancel = CANCELLABLE.includes(order.status);
@@ -314,5 +340,235 @@ function DocumentsSection({ order }: { order: MarketplaceOrder }) {
         })}
       </ul>
     </section>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Consumer (household) view — spec §9.1 lifecycle.
+// ═════════════════════════════════════════════════════════════════════════
+
+const CONSUMER_LIFECYCLE: {
+  key: ConsumerOrderStatus;
+  label: string;
+  description: string;
+  icon: typeof CircleDollarSign;
+}[] = [
+  { key: "paid",       label: "Paid",           description: "Payment received. We're picking your order.", icon: CircleDollarSign },
+  { key: "picking",    label: "Picking",        description: "Your items are being selected at the hub.",    icon: PackageCheck },
+  { key: "dispatched", label: "Out for delivery", description: "Rider is on the way with your order.",       icon: Truck },
+  { key: "delivered",  label: "Delivered",      description: "Order handed over. Enjoy.",                    icon: Check },
+];
+
+function consumerReachedIndex(status: ConsumerOrderStatus): number {
+  switch (status) {
+    case "pending_payment": return -1;
+    case "paid":            return 0;
+    case "picking":         return 1;
+    case "dispatched":      return 2;
+    case "delivered":       return 3;
+    case "cancelled":       return -1;
+    case "expired":         return -1;
+  }
+}
+
+const CONSUMER_CANCELLABLE: ConsumerOrderStatus[] = ["pending_payment", "paid", "picking"];
+
+function ConsumerOrderView({ order: initial }: { order: ConsumerOrder }) {
+  const router = useRouter();
+  const navigate = useNavigate();
+  const [cancelling, setCancelling] = useState(false);
+
+  // When the buyer lands here from Paystack's redirect, the webhook may not
+  // have flipped status yet. Poll every 3s while status='pending_payment'
+  // (limit 10 tries = 30s) so the UI catches up without a manual refresh.
+  const { data: order } = useQuery({
+    queryKey: ["consumer-order", initial.id],
+    queryFn: () => getConsumerOrder(initial.id).then((o) => o ?? initial),
+    initialData: initial,
+    refetchInterval: (query) => {
+      const cur = query.state.data;
+      return cur && cur.status === "pending_payment" ? 3000 : false;
+    },
+  });
+
+  const status = order.status;
+  const cancelled = status === "cancelled" || status === "expired";
+  const reached = consumerReachedIndex(status);
+  const canCancel = CONSUMER_CANCELLABLE.includes(status);
+
+  const handleCancel = async () => {
+    if (!canCancel || cancelling) return;
+    if (!confirm(`Cancel order ${order.orderNumber}?`)) return;
+    setCancelling(true);
+    try {
+      const res = await cancelConsumerOrder(order.id);
+      if (res.needs_refund) {
+        toast.success("Cancelled — a refund is being arranged.");
+      } else {
+        toast.success("Cancelled.");
+      }
+      await router.invalidate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Cancel failed");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-3xl px-4 pb-16 md:px-6">
+        <header className="flex items-center gap-3 py-4">
+          <Link
+            to="/orders"
+            className="grid h-9 w-9 place-items-center rounded-full border border-divider bg-surface text-ink hover:bg-muted"
+            aria-label="Back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">Order</p>
+            <h1 className="truncate text-[20px] font-bold text-ink md:text-[24px]">{order.orderNumber}</h1>
+          </div>
+          <StatusBadge status={status} />
+        </header>
+
+        {status === "pending_payment" && (
+          <div className="mt-2 flex items-start gap-2 rounded-2xl border border-divider bg-trust/8 p-4 text-[13px] text-trust-deep">
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            <div>
+              <p className="font-semibold">Confirming your payment…</p>
+              <p className="mt-0.5 text-[12px]">
+                We'll update this page automatically the moment Paystack confirms.
+                If nothing happens in a minute, try refreshing.
+              </p>
+            </div>
+          </div>
+        )}
+
+        <section className="mt-3 grid gap-3 rounded-2xl border border-divider bg-surface p-5 md:grid-cols-3">
+          <Meta label="Placed" value={format(new Date(order.createdAt), "d MMM yyyy, HH:mm")} />
+          <Meta
+            label="Requested"
+            value={order.requestedDate ? format(new Date(order.requestedDate), "d MMM yyyy") : "—"}
+          />
+          <Meta label="Total" value={formatKes(order.totalKes)} accent />
+        </section>
+
+        {/* Lifecycle (skip the pending_payment step — that's the top banner) */}
+        <section className="mt-5 rounded-2xl border border-divider bg-surface p-5">
+          <div className="flex items-center justify-between">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Lifecycle</p>
+            {cancelled && (
+              <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-destructive">
+                <XCircle className="h-3.5 w-3.5" /> {status === "expired" ? "Expired (unpaid)" : "Cancelled"}
+              </span>
+            )}
+          </div>
+
+          <ol className="mt-4 space-y-4">
+            {CONSUMER_LIFECYCLE.map((step, i) => {
+              const done = !cancelled && i <= reached;
+              const active = !cancelled && i === reached;
+              const Icon = step.icon;
+              return (
+                <li key={step.key} className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <span
+                      className={[
+                        "grid h-9 w-9 place-items-center rounded-full border-2",
+                        done ? "border-trust bg-trust text-trust-foreground" :
+                        cancelled ? "border-divider bg-muted text-ink-muted opacity-50" :
+                        "border-divider bg-background text-ink-muted",
+                      ].join(" ")}
+                    >
+                      {done ? <Check className="h-4 w-4" strokeWidth={3} /> : <Icon className="h-4 w-4" />}
+                    </span>
+                    {i < CONSUMER_LIFECYCLE.length - 1 && (
+                      <span className={`mt-1 h-8 w-0.5 ${i < reached ? "bg-trust" : "bg-divider"}`} />
+                    )}
+                  </div>
+                  <div className="flex-1 pb-2">
+                    <div className="flex items-center gap-2">
+                      <p className={`text-[14px] font-semibold ${done ? "text-ink" : "text-ink-muted"}`}>{step.label}</p>
+                      {active && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-trust/12 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-trust-deep">
+                          <Clock className="h-2.5 w-2.5" /> Current
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-0.5 text-[12px] text-ink-muted">{step.description}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+
+        {/* Line items */}
+        <section className="mt-5 rounded-2xl border border-divider bg-surface p-5">
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Items</p>
+          <ul className="mt-3 divide-y divide-divider">
+            {order.lines.map((l) => (
+              <li key={l.id} className="flex items-start justify-between gap-3 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-semibold text-ink">{l.productName}</p>
+                  <p className="text-[12px] text-ink-muted">
+                    {l.qty} {l.baseUnit} · {formatKes(l.shelfRateKes)}/{l.baseUnit}
+                    {l.status === "cancelled" && (
+                      <span className="ml-2 rounded-full bg-destructive/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-destructive">
+                        Cancelled
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <span className="text-[14px] font-semibold tabular-nums text-ink">
+                  {formatKes(l.lineTotalKes)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <dl className="mt-3 space-y-1 border-t border-divider pt-3 text-[13px]">
+            <div className="flex justify-between text-ink-muted">
+              <dt>Subtotal</dt><dd className="tabular-nums text-ink">{formatKes(order.goodsTotalKes)}</dd>
+            </div>
+            <div className="flex justify-between text-ink-muted">
+              <dt>Delivery</dt><dd className="tabular-nums text-ink">{formatKes(order.deliveryFeeKes)}</dd>
+            </div>
+            {order.creditAppliedKes > 0 && (
+              <div className="flex justify-between text-ink-muted">
+                <dt>Credit</dt><dd className="tabular-nums text-ink">-{formatKes(order.creditAppliedKes)}</dd>
+              </div>
+            )}
+            <div className="mt-1 flex justify-between border-t border-divider pt-2 text-[14px] font-semibold text-ink">
+              <dt>Total</dt><dd className="tabular-nums text-trust">{formatKes(order.totalKes)}</dd>
+            </div>
+          </dl>
+        </section>
+
+        {(status === "pending_payment" && order.paystackReference) && (
+          <p className="mt-3 text-center text-[12px] text-ink-muted">
+            Paystack ref: {order.paystackReference}
+          </p>
+        )}
+
+        <section className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          {canCancel && (
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={cancelling}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-destructive/30 bg-surface px-5 py-2.5 text-[14px] font-semibold text-destructive hover:bg-destructive/5 disabled:opacity-60"
+            >
+              <Ban className="h-4 w-4" /> {cancelling ? "Cancelling…" : "Cancel order"}
+            </button>
+          )}
+        </section>
+
+        <p className="mt-6 text-center text-[11px] text-ink-muted">
+          Sourced from Tradly — Kenya's single-source supply chain.
+        </p>
+      </div>
+    </AppShell>
   );
 }

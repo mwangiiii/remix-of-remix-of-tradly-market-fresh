@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Boxes, LayoutGrid, PackageCheck, Tags } from "lucide-react";
+import { ArrowLeft, BanknoteArrowUp, Boxes, FileText, Gift, LayoutGrid, MapPin, PackageCheck, ShoppingBag, Tags, Truck, Wallet } from "lucide-react";
 import { RequireAdmin } from "@/components/RequireAdmin";
 
 export const Route = createFileRoute("/admin/")({
@@ -11,8 +11,15 @@ const tiles = [
   { to: "/admin/catalog", title: "Catalog", desc: "Products, images, effective-dated pricing", Icon: LayoutGrid },
   { to: "/admin/categories", title: "Categories", desc: "Organise the storefront taxonomy", Icon: Tags },
   { to: "/admin/inventory", title: "Inventory", desc: "On-hand, reserved, remaining, status", Icon: Boxes },
-  { to: "/admin/orders", title: "Orders", desc: "Approve, post GRN, cancel — with live reservation resolution", Icon: PackageCheck },
-];
+  { to: "/admin/orders", title: "Tenant orders", desc: "Approve, post GRN, cancel — with live reservation resolution", Icon: PackageCheck },
+  { to: "/admin/consumer-orders", title: "Consumer orders", desc: "Household orders — walk paid → picking → dispatched → delivered", Icon: ShoppingBag },
+  { to: "/admin/deliveries", title: "Deliveries", desc: "Assign riders to paid orders; watch in-progress trips", Icon: Truck },
+  { to: "/admin/rider-pay", title: "Rider pay", desc: "Cash payables per rider; roster + link tokens", Icon: Wallet },
+  { to: "/admin/credit", title: "Tradly Credit", desc: "Issue goodwill/launch/refund credit to households", Icon: Gift },
+  { to: "/admin/refund-requests", title: "Refund requests", desc: "Household cash-refund queue — mark M-Pesa/bank payouts", Icon: BanknoteArrowUp },
+  { to: "/admin/settlements", title: "Settlements", desc: "Weekly consignment runs per supplier — confirm, invoice, pay", Icon: FileText },
+  { to: "/admin/zones", title: "Delivery zones", desc: "Nairobi rider zones — fees, cutoffs, active areas", Icon: MapPin },
+] as const;
 
 function AdminHome() {
   return (

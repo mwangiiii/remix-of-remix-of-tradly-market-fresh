@@ -9,7 +9,10 @@ import type {
   MarketplaceCategory,
   MarketplaceProduct,
   MarketplaceProductUnit,
+  MarketplaceRoundingRule,
+  MarketplaceTaxTreatment,
   ScheduledPrice,
+  SellMode,
 } from "../types/marketplace";
 
 // ─── Row shapes ──────────────────────────────────────────────────────────
@@ -21,7 +24,22 @@ type CategoryRow = {
   parent_id: string | null;
   display_order: number;
   is_active: boolean;
+  default_markup_pct: number | string | null;
+  default_tax_treatment: MarketplaceTaxTreatment | null;
+  default_rounding_rule: MarketplaceRoundingRule;
 };
+
+/**
+ * Admin-side category shape includes the pricing-engine defaults so the
+ * product form can render "inherited from Vegetables: 30%" hints and the
+ * "Use category default" button (spec §5.7).
+ */
+export interface AdminCategory extends MarketplaceCategory {
+  isActive: boolean;
+  defaultMarkupPct: number | null;
+  defaultTaxTreatment: MarketplaceTaxTreatment | null;
+  defaultRoundingRule: MarketplaceRoundingRule;
+}
 
 type UnitRow = {
   id: string;
@@ -46,6 +64,17 @@ type ProductRow = {
   keywords: string[] | null;
   is_featured: boolean;
   published: boolean;
+  // Pricing engine columns (spec §5). Admin sees products regardless of
+  // whether they have a current price version yet (Draft state), so this
+  // module does NOT inner-join marketplace_price_versions like the
+  // storefront does — currentPrice will be null for unpriced products.
+  sell_mode: SellMode;
+  base_unit: string;
+  min_qty: number | string;
+  qty_step: number | string;
+  avg_unit_weight_kg: number | string | null;
+  pack_contents_label: string | null;
+  tax_treatment: MarketplaceTaxTreatment | null;
   marketplace_product_units: UnitRow[] | null;
 };
 
@@ -88,7 +117,7 @@ export interface AdminProduct extends MarketplaceProduct {
 const num = (v: number | string): number =>
   typeof v === "number" ? v : Number(v);
 
-function mapCategory(r: CategoryRow): MarketplaceCategory & { isActive: boolean } {
+function mapCategory(r: CategoryRow): AdminCategory {
   return {
     id: r.id,
     name: r.name,
@@ -96,7 +125,10 @@ function mapCategory(r: CategoryRow): MarketplaceCategory & { isActive: boolean 
     parentId: r.parent_id,
     displayOrder: r.display_order,
     isActive: r.is_active,
-  } as MarketplaceCategory & { isActive: boolean };
+    defaultMarkupPct: r.default_markup_pct == null ? null : num(r.default_markup_pct),
+    defaultTaxTreatment: r.default_tax_treatment,
+    defaultRoundingRule: r.default_rounding_rule,
+  };
 }
 
 function mapUnit(r: UnitRow): MarketplaceProductUnit {
@@ -130,6 +162,18 @@ function mapProduct(r: ProductRow): AdminProduct {
     isFeatured: r.is_featured,
     keywords: r.keywords ?? undefined,
     published: r.published,
+    // Pricing engine (spec §5). Admin doesn't join price_versions here —
+    // pricing history has its own admin surface (B-admin form + versions
+    // list). currentPrice stays null; admin UI reads sellMode/baseUnit
+    // directly from these product columns.
+    sellMode: r.sell_mode,
+    baseUnit: r.base_unit,
+    minQty: num(r.min_qty),
+    qtyStep: num(r.qty_step),
+    avgUnitWeightKg: r.avg_unit_weight_kg == null ? null : num(r.avg_unit_weight_kg),
+    packContentsLabel: r.pack_contents_label,
+    taxTreatment: r.tax_treatment,
+    currentPrice: null,
   };
 }
 
@@ -146,6 +190,8 @@ function mapSchedule(r: ScheduledPriceRow): ScheduledPrice {
 const PRODUCT_SELECT = `
   id, category_id, name, slug, description, origin,
   thumbnail_url, gallery_urls, keywords, is_featured, published,
+  sell_mode, base_unit, min_qty, qty_step,
+  avg_unit_weight_kg, pack_contents_label, tax_treatment,
   marketplace_product_units (
     id, product_id, unit_label, unit_qty, is_default, price_kes, availability, display_order
   )
@@ -153,13 +199,13 @@ const PRODUCT_SELECT = `
 
 // ─── Categories ──────────────────────────────────────────────────────────
 
-export async function adminListCategories(): Promise<(MarketplaceCategory & { isActive: boolean })[]> {
+export async function adminListCategories(): Promise<AdminCategory[]> {
   const { data, error } = await getSupabase()
     .from("marketplace_categories")
-    .select("id, name, slug, parent_id, display_order, is_active")
+    .select("id, name, slug, parent_id, display_order, is_active, default_markup_pct, default_tax_treatment, default_rounding_rule")
     .order("display_order", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(mapCategory);
+  return (data ?? []).map((r) => mapCategory(r as unknown as CategoryRow));
 }
 
 export interface CategoryInput {
@@ -169,10 +215,18 @@ export interface CategoryInput {
   parentId?: string | null;
   displayOrder: number;
   isActive?: boolean;
+  // Pricing engine defaults — inherited by products in this category when they
+  // don't override. Recursively resolved by fn_marketplace_resolve_defaults;
+  // NULL here means "inherit from parent category, then platform default (25%,
+  // hardcoded in the RPC)." Setting these here is the ONLY way for ops to
+  // manage category markup without SQL.
+  defaultMarkupPct?: number | null;
+  defaultTaxTreatment?: MarketplaceTaxTreatment | null;
+  defaultRoundingRule?: MarketplaceRoundingRule | null;
 }
 
 export async function adminUpsertCategory(input: CategoryInput): Promise<string> {
-  const row = {
+  const row: Record<string, unknown> = {
     id: input.id,
     name: input.name,
     slug: input.slug,
@@ -180,6 +234,13 @@ export async function adminUpsertCategory(input: CategoryInput): Promise<string>
     display_order: input.displayOrder,
     is_active: input.isActive ?? true,
   };
+  // Only send pricing defaults when the caller explicitly supplied them so
+  // an UPDATE from a legacy code path doesn't clobber existing values back to
+  // NULL. Postgres DEFAULTs kick in only on INSERT for missing keys.
+  if (input.defaultMarkupPct !== undefined) row.default_markup_pct = input.defaultMarkupPct;
+  if (input.defaultTaxTreatment !== undefined) row.default_tax_treatment = input.defaultTaxTreatment;
+  if (input.defaultRoundingRule !== undefined) row.default_rounding_rule = input.defaultRoundingRule;
+
   const { data, error } = await getSupabase()
     .from("marketplace_categories")
     .upsert(row, { onConflict: "id" })
@@ -220,10 +281,21 @@ export interface ProductInput {
   keywords?: string[];
   isFeatured?: boolean;
   published?: boolean;
+  // Pricing engine columns (spec §5). Optional so callers that only touch
+  // legacy product fields don't have to specify them — the DB defaults
+  // (sell_mode='by_piece', base_unit='piece', min_qty=1, qty_step=1) keep
+  // pre-migration rows valid.
+  sellMode?: SellMode;
+  baseUnit?: string;
+  minQty?: number;
+  qtyStep?: number;
+  avgUnitWeightKg?: number | null;
+  packContentsLabel?: string | null;
+  taxTreatment?: MarketplaceTaxTreatment | null;
 }
 
 export async function adminUpsertProduct(input: ProductInput): Promise<string> {
-  const row = {
+  const row: Record<string, unknown> = {
     id: input.id,
     category_id: input.categoryId,
     name: input.name,
@@ -236,6 +308,18 @@ export async function adminUpsertProduct(input: ProductInput): Promise<string> {
     is_featured: input.isFeatured ?? false,
     published: input.published ?? false,
   };
+  // Only set pricing-engine columns when the caller supplied them, so an
+  // upsert from a legacy code path doesn't clobber a product's sell_mode
+  // back to the default. Postgres DEFAULTs kick in only on INSERT, not
+  // UPDATE, so omitting these on UPDATE preserves the current value.
+  if (input.sellMode !== undefined) row.sell_mode = input.sellMode;
+  if (input.baseUnit !== undefined) row.base_unit = input.baseUnit;
+  if (input.minQty !== undefined) row.min_qty = input.minQty;
+  if (input.qtyStep !== undefined) row.qty_step = input.qtyStep;
+  if (input.avgUnitWeightKg !== undefined) row.avg_unit_weight_kg = input.avgUnitWeightKg;
+  if (input.packContentsLabel !== undefined) row.pack_contents_label = input.packContentsLabel;
+  if (input.taxTreatment !== undefined) row.tax_treatment = input.taxTreatment;
+
   const { data, error } = await getSupabase()
     .from("marketplace_products")
     .upsert(row, { onConflict: "id" })
@@ -243,6 +327,86 @@ export async function adminUpsertProduct(input: ProductInput): Promise<string> {
     .single();
   if (error) throw error;
   return data.id;
+}
+
+// ─── Price versions (spec §5) ────────────────────────────────────────────
+// Thin wrapper around fn_marketplace_write_price_version. The RPC handles
+// cascade resolution, bidirectional entry, rounding, and one-current-row
+// enforcement — this function just marshals inputs and returns the new id.
+
+/**
+ * A single row from marketplace_price_versions — the versioned history of a
+ * product's shelf pricing. `effectiveTo` is null on the current row and set
+ * to the close timestamp on superseded rows. Fed to the admin price-history
+ * view so ops can answer "why did we change X's price last week?"
+ */
+export interface AdminPriceVersion {
+  id: string;
+  costRateKes: number;
+  markupPct: number | null;
+  effectiveMarkupPct: number;
+  rawSellRateKes: number;
+  shelfRateKes: number;
+  roundingRule: MarketplaceRoundingRule;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  changedBy: string;
+  changeReason: string | null;
+  createdAt: string;
+}
+
+export async function adminListPriceHistory(productId: string): Promise<AdminPriceVersion[]> {
+  const { data, error } = await getSupabase()
+    .from("marketplace_price_versions")
+    .select(
+      "id, cost_rate_kes, markup_pct, effective_markup_pct, raw_sell_rate_kes, shelf_rate_kes, rounding_rule, effective_from, effective_to, changed_by, change_reason, created_at",
+    )
+    .eq("product_id", productId)
+    .order("effective_from", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    costRateKes: num(r.cost_rate_kes as number | string),
+    markupPct: r.markup_pct == null ? null : num(r.markup_pct as number | string),
+    effectiveMarkupPct: num(r.effective_markup_pct as number | string),
+    rawSellRateKes: num(r.raw_sell_rate_kes as number | string),
+    shelfRateKes: num(r.shelf_rate_kes as number | string),
+    roundingRule: r.rounding_rule as MarketplaceRoundingRule,
+    effectiveFrom: r.effective_from as string,
+    effectiveTo: (r.effective_to as string) ?? null,
+    changedBy: r.changed_by as string,
+    changeReason: (r.change_reason as string) ?? null,
+    createdAt: r.created_at as string,
+  }));
+}
+
+export interface PriceVersionInput {
+  productId: string;
+  costRateKes: number;
+  /** Provide EITHER markupPct OR shelfRateKes (bidirectional entry). */
+  markupPct?: number | null;
+  shelfRateKes?: number | null;
+  /** NULL = inherit rounding from the product's category cascade. */
+  roundingRule?: MarketplaceRoundingRule | null;
+  changeReason?: string | null;
+}
+
+export async function adminWritePriceVersion(
+  input: PriceVersionInput,
+): Promise<string> {
+  const { data, error } = await getSupabase().rpc(
+    "fn_marketplace_write_price_version",
+    {
+      p_product_id: input.productId,
+      p_cost_rate_kes: input.costRateKes,
+      p_markup_pct: input.markupPct ?? null,
+      p_shelf_rate_kes: input.shelfRateKes ?? null,
+      p_rounding_rule: input.roundingRule ?? null,
+      p_change_reason: input.changeReason ?? null,
+    },
+  );
+  if (error) throw error;
+  return data as string;
 }
 
 export async function adminDeleteProduct(id: string): Promise<void> {

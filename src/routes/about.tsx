@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { aboutPageHead } from "../marketplace/lib/seoPages";
+import { usePersonaCopy } from "../marketplace/lib/persona";
 
 export const Route = createFileRoute("/about")({
   head: aboutPageHead,
@@ -9,6 +10,7 @@ export const Route = createFileRoute("/about")({
 });
 
 function AboutPage() {
+  const copy = usePersonaCopy();
   return (
     <AppShell variant="focused">
       <div className="px-4 pb-16 lg:px-8">
@@ -146,12 +148,7 @@ function AboutPage() {
                 Same-day dispatch across Nairobi
               </dt>
               <dd className="mt-1 text-[13.5px] leading-relaxed text-ink-muted lg:text-[14.5px]">
-                Orders placed before 3&nbsp;p.m. are dispatched the same day and typically land
-                the same evening across Nairobi County. Kiambu and near Machakos land next day.
-                Kirinyaga, Murang'a, Nyeri, Nyandarua and Embu land within one to two days.
-                Nakuru county (Nakuru, Naivasha, Gilgil, Elburgon, Subukia), Laikipia (Nanyuki,
-                Nyahururu) and Uasin Gishu (Eldoret) land within two to three days depending on
-                distance from the Nairobi depot.
+                {copy.aboutCoverageIntro}
               </dd>
             </div>
             <div>
@@ -189,8 +186,8 @@ function AboutPage() {
                 Coverage
               </dt>
               <dd className="mt-1 text-[14px] font-semibold text-ink">
-                Nairobi, Kiambu, Machakos, Kirinyaga, Murang'a, Nyeri, Nyandarua, Embu, Nakuru,
-                Laikipia, Uasin Gishu
+                Nairobi — eight zones (Kilimani, Kileleshwa, Lavington, Westlands,
+                Upper Hill, Eastlands, Kasarani, Karen, Runda, Ruaka). Expanding.
               </dd>
             </div>
             <div className="rounded-2xl border border-divider bg-background p-4">

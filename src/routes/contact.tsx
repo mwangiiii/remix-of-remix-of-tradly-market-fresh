@@ -3,6 +3,7 @@ import { Mail, MapPin, Phone, Clock } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { contactPageHead } from "../marketplace/lib/seoPages";
+import { usePersonaCopy } from "../marketplace/lib/persona";
 import {
   TRADLY_PHONE_E164,
   TRADLY_PHONE_DISPLAY,
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
+  const copy = usePersonaCopy();
   return (
     <AppShell variant="focused">
       <div className="px-4 pb-16 lg:px-8">
@@ -123,8 +125,7 @@ function ContactPage() {
               </p>
               <p className="mt-1 text-[15px] font-semibold text-ink">Nairobi, Kenya</p>
               <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-                Delivering across Nairobi, Kiambu, Machakos, Kirinyaga, Murang'a, Nyeri,
-                Nyandarua, Embu, Nakuru, Laikipia and Uasin Gishu.
+                {copy.contactBlurb}
               </p>
             </div>
           </div>

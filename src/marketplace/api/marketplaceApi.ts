@@ -16,12 +16,16 @@ import { api, apiGet, apiPost } from "@/services/api";
 import { SEARCH_SYNONYMS } from "../config/searchSynonyms";
 import type {
   CartLine,
+  CurrentPrice,
   MarketplaceCategory,
   MarketplaceProduct,
   MarketplaceProductUnit,
   MarketplaceOrder,
+  MarketplaceRoundingRule,
+  MarketplaceTaxTreatment,
   OrderStatus,
   SavedList,
+  SellMode,
   NotificationItem,
 } from "../types/marketplace";
 
@@ -60,6 +64,14 @@ type MediaRow = {
   is_thumbnail: boolean;
 };
 
+type PriceVersionRow = {
+  id: string;
+  cost_rate_kes: number | string;
+  shelf_rate_kes: number | string;
+  effective_markup_pct: number | string;
+  rounding_rule: MarketplaceRoundingRule;
+};
+
 type ProductRow = {
   id: string;
   category_id: string;
@@ -71,6 +83,14 @@ type ProductRow = {
   gallery_urls: string[] | null;
   keywords: string[] | null;
   is_featured: boolean;
+  // Pricing engine columns (Household Commerce spec §5)
+  sell_mode: SellMode;
+  base_unit: string;
+  min_qty: number | string;
+  qty_step: number | string;
+  avg_unit_weight_kg: number | string | null;
+  pack_contents_label: string | null;
+  tax_treatment: MarketplaceTaxTreatment | null;
   tax_ty_cd: string | null;
   item_cls_cd: string | null;
   item_cd: string | null;
@@ -83,6 +103,12 @@ type ProductRow = {
   order_cutoff_time: string | null;
   marketplace_product_units: UnitRow[] | null;
   marketplace_product_media: MediaRow[] | null;
+  /**
+   * Inner-joined + filtered to WHERE effective_to IS NULL — so this array
+   * is either exactly one row (the current price version) or the whole
+   * product is excluded from the result set. See PRODUCT_SELECT.
+   */
+  marketplace_price_versions: PriceVersionRow[] | null;
 };
 
 const num = (v: number | string): number => (typeof v === "number" ? v : Number(v));
@@ -107,6 +133,16 @@ function mapUnit(row: UnitRow): MarketplaceProductUnit {
     availability: row.availability,
     moq: row.moq == null ? null : num(row.moq),
     casePackSize: row.case_pack_size == null ? null : num(row.case_pack_size),
+  };
+}
+
+function mapPriceVersion(row: PriceVersionRow): CurrentPrice {
+  return {
+    priceVersionId: row.id,
+    costRateKes: num(row.cost_rate_kes),
+    shelfRateKes: num(row.shelf_rate_kes),
+    effectiveMarkupPct: num(row.effective_markup_pct),
+    roundingRule: row.rounding_rule,
   };
 }
 
@@ -137,6 +173,12 @@ function mapProduct(row: ProductRow): MarketplaceProduct {
     .slice()
     .sort((a, b) => a.display_order - b.display_order)
     .map(mapUnit);
+  // The storefront query INNER-JOINs marketplace_price_versions filtered to
+  // effective_to IS NULL — so this array is either exactly one row (current
+  // price) or the whole product was excluded from the result set. Any code
+  // path that mints a MarketplaceProduct outside those queries (admin
+  // pre-priced edits, tests) may see null here; guard accordingly.
+  const currentPriceRow = (row.marketplace_price_versions ?? [])[0];
   return {
     id: row.id,
     categoryId: row.category_id,
@@ -150,6 +192,16 @@ function mapProduct(row: ProductRow): MarketplaceProduct {
     units,
     isFeatured: row.is_featured,
     keywords: row.keywords ?? undefined,
+    // Pricing engine (spec §5)
+    sellMode: row.sell_mode,
+    baseUnit: row.base_unit,
+    minQty: num(row.min_qty),
+    qtyStep: num(row.qty_step),
+    avgUnitWeightKg: row.avg_unit_weight_kg == null ? null : num(row.avg_unit_weight_kg),
+    packContentsLabel: row.pack_contents_label,
+    taxTreatment: row.tax_treatment,
+    currentPrice: currentPriceRow ? mapPriceVersion(currentPriceRow) : null,
+    // Compliance + logistics (unchanged)
     taxTyCd: (row.tax_ty_cd as MarketplaceProduct["taxTyCd"]) ?? null,
     itemClsCd: row.item_cls_cd,
     itemCd: row.item_cd,
@@ -163,9 +215,17 @@ function mapProduct(row: ProductRow): MarketplaceProduct {
   };
 }
 
+// marketplace_price_versions!inner — PostgREST inner-joins the embed, so
+// products WITHOUT a matching row (i.e. no current price version) are
+// dropped from the result. The .is('marketplace_price_versions.effective_to',
+// null) filter on the query side narrows the embed to just the current row.
+// Together they enforce spec §6.3: "A product with no current price version
+// is invisible to the storefront, enforced by the query, not by discipline."
 const PRODUCT_SELECT = `
   id, category_id, name, slug, description, origin,
   thumbnail_url, gallery_urls, keywords, is_featured,
+  sell_mode, base_unit, min_qty, qty_step,
+  avg_unit_weight_kg, pack_contents_label, tax_treatment,
   tax_ty_cd, item_cls_cd, item_cd, is_taxable, kra_registered,
   country_of_origin, storage_class, shelf_life_days, lead_time_days, order_cutoff_time,
   marketplace_product_units (
@@ -174,6 +234,9 @@ const PRODUCT_SELECT = `
   ),
   marketplace_product_media (
     id, url, kind, mime_type, alt_text, poster_url, display_order, is_thumbnail
+  ),
+  marketplace_price_versions!inner (
+    id, cost_rate_kes, shelf_rate_kes, effective_markup_pct, rounding_rule
   )
 `;
 
@@ -190,10 +253,26 @@ export async function getCategories(): Promise<MarketplaceCategory[]> {
   return (data ?? []).map(mapCategory);
 }
 
+// Shared filter: narrow the embedded marketplace_price_versions rows to the
+// single current one. Combined with !inner on the embed (see PRODUCT_SELECT)
+// this drops products with no current price version from the result — spec
+// §6.3 "A product with no current price version is invisible to the storefront".
+const CURRENT_PRICE_FILTER = "marketplace_price_versions.effective_to" as const;
+
+// Belt-and-braces: filter published=true at the query level instead of relying
+// solely on the RLS policy on marketplace_price_versions. The RLS policy is
+// bypassed by platform_super_admin JWTs (marketplace_price_versions_super_admin_all
+// in 20260910140000_marketplace_pricing_engine_schema.sql), so a signed-in
+// super admin would otherwise see unpublished products on the storefront.
+// Explicit .eq closes that gap and makes the storefront query mean the same
+// thing regardless of caller role.
+
 export async function getAllProducts(): Promise<MarketplaceProduct[]> {
   const { data, error } = await getSupabase()
     .from("marketplace_products")
     .select(PRODUCT_SELECT)
+    .eq("published", true)
+    .is(CURRENT_PRICE_FILTER, null)
     .order("name", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(mapProduct);
@@ -212,6 +291,8 @@ export async function getProductsByCategory(categorySlug: string): Promise<Marke
     .from("marketplace_products")
     .select(PRODUCT_SELECT)
     .eq("category_id", cat.data.id)
+    .eq("published", true)
+    .is(CURRENT_PRICE_FILTER, null)
     .order("name", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(mapProduct);
@@ -222,6 +303,8 @@ export async function getProduct(slug: string): Promise<MarketplaceProduct | und
     .from("marketplace_products")
     .select(PRODUCT_SELECT)
     .eq("slug", slug)
+    .eq("published", true)
+    .is(CURRENT_PRICE_FILTER, null)
     .maybeSingle();
   if (error) throw error;
   return data ? mapProduct(data as ProductRow) : undefined;
@@ -248,6 +331,8 @@ export async function searchProducts(query: string): Promise<MarketplaceProduct[
     .from("marketplace_products")
     .select(PRODUCT_SELECT)
     .or(orParts.join(","))
+    .eq("published", true)
+    .is(CURRENT_PRICE_FILTER, null)
     .limit(50);
   if (error) throw error;
   return (data ?? []).map(mapProduct);

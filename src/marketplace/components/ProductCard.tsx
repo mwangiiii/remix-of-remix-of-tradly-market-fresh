@@ -46,6 +46,12 @@ export function ProductCard({
   // A product might have zero units if it was created in the admin but never
   // saved a unit. Never crash — render a minimal placeholder instead.
   const defaultUnit = product.units.find((u) => u.isDefault) ?? product.units[0];
+  // Pricing engine (spec §5): shelf price comes from marketplace_price_versions,
+  // not from the deprecated unit-level price. Products that reach ProductCard
+  // via storefront queries always have currentPrice (INNER-joined). The unit
+  // fallback stays as a belt-and-braces for any code path that mints a product
+  // outside those queries.
+  const shelfPriceKes = product.currentPrice?.shelfRateKes ?? defaultUnit?.priceKes ?? 0;
   const [qty, setQty] = useState(0);
   const [addPop, setAddPop] = useState(false);
   const qc = useQueryClient();
@@ -99,6 +105,11 @@ export function ProductCard({
   const effectiveQty = cartLine?.quantity ?? qty;
   const outOfStock = defaultUnit.availability === "out_of_stock";
 
+  // First add uses the product's minimum orderable quantity — for weight
+  // products with min 0.5 kg this adds 0.5 kg, not 1. Subsequent bumps
+  // via the stepper add qty_step at a time.
+  const initialAddQty = product.minQty ?? 1;
+
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     if (outOfStock) return;
@@ -109,10 +120,19 @@ export function ProductCard({
       thumbnailUrl: product.thumbnailUrl,
       productName: product.name,
       unitLabel: defaultUnit.unitLabel,
-      quantity: 1,
-      priceKes: defaultUnit.priceKes,
+      quantity: initialAddQty,
+      // Snapshot the current shelf price into the cart line. Cart still
+      // reprices server-side at consumer-order-init (Checkpoint E) — this
+      // is display cache only. Falls back to the legacy unit price when
+      // the product hasn't been priced in the new engine yet.
+      priceKes: product.currentPrice?.shelfRateKes ?? defaultUnit.priceKes,
+      // Pricing-engine hints let /cart's stepper honour weight/piece/pack.
+      sellMode: product.sellMode,
+      baseUnit: product.baseUnit,
+      minQty: product.minQty,
+      qtyStep: product.qtyStep,
     });
-    setQty(1);
+    setQty(initialAddQty);
   };
 
   const handleChange = (v: number) => {
@@ -146,7 +166,7 @@ export function ProductCard({
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-semibold text-ink">{product.name}</h3>
           <p className="mt-0.5 text-[12px] text-ink-muted">{defaultUnit.unitLabel}</p>
-          <p className="mt-1 text-[17px] font-bold text-farm">{formatKes(defaultUnit.priceKes)}</p>
+          <p className="mt-1 text-[17px] font-bold text-farm">{formatKes(shelfPriceKes)}</p>
         </div>
         <div className="pt-1" onClick={(e) => e.preventDefault()}>
           {effectiveQty === 0 ? (
@@ -160,7 +180,15 @@ export function ProductCard({
               <Plus className="h-4 w-4" strokeWidth={2.5} />
             </button>
           ) : (
-            <QuantityStepper value={effectiveQty} onChange={handleChange} size="sm" />
+            <QuantityStepper
+              value={effectiveQty}
+              onChange={handleChange}
+              size="sm"
+              min={product.minQty}
+              step={product.qtyStep}
+              sellMode={product.sellMode}
+              baseUnit={product.baseUnit}
+            />
           )}
         </div>
       </div>

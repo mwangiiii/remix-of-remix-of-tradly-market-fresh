@@ -3,27 +3,27 @@ import { useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Plus, Trash2, Save, X, CalendarClock, Package, Upload,
+  ArrowLeft, Plus, Trash2, Save, X, Package, Upload,
 } from "lucide-react";
 import {
   adminListProducts,
   adminListCategories,
-  adminListSchedules,
   adminUpsertProduct,
   adminDeleteProduct,
   adminReplaceUnits,
-  adminAddSchedule,
-  adminRemoveSchedule,
   adminUploadImage,
+  adminWritePriceVersion,
+  type AdminCategory,
   type AdminProduct,
   type UnitInput,
 } from "../marketplace/api/adminCatalog";
 import { RequireAdmin } from "@/components/RequireAdmin";
 import { formatKes } from "../marketplace/lib/format";
 import type {
-  MarketplaceCategory,
   MarketplaceProductUnit,
-  ScheduledPrice,
+  MarketplaceRoundingRule,
+  MarketplaceTaxTreatment,
+  SellMode,
 } from "../marketplace/types/marketplace";
 
 export const Route = createFileRoute("/admin/catalog")({
@@ -37,6 +37,72 @@ export const Route = createFileRoute("/admin/catalog")({
 
 const slugify = (s: string) =>
   s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/**
+ * Platform-default markup used when neither the product nor its category
+ * chain supplies one. Mirrors the constant baked into
+ * fn_marketplace_resolve_defaults (tradly-flow migration
+ * 20260910150000_marketplace_pricing_engine_rpcs.sql). Kept in sync by
+ * convention — if the SQL constant changes, update here too.
+ */
+const PLATFORM_DEFAULT_MARKUP_PCT = 25;
+
+/**
+ * Client-side mirror of fn_marketplace_apply_rounding (same migration).
+ * Powers the live shelf-price preview in the admin form. Server-side
+ * write always re-applies the SQL function, so any drift is caught at
+ * fn_marketplace_write_price_version — this is a UI convenience.
+ */
+function applyRounding(amount: number, rule: MarketplaceRoundingRule): number {
+  if (!Number.isFinite(amount) || amount < 0) return 0;
+  switch (rule) {
+    case "exact":
+      return Math.round(amount * 100) / 100;
+    case "nearest_1":
+      return Math.round(amount);
+    case "nearest_5":
+      return Math.round(amount / 5) * 5;
+    case "nearest_10":
+      return Math.round(amount / 10) * 10;
+    case "charm_down":
+      if (amount < 5) return Math.round(amount * 100) / 100;
+      return Math.floor(amount / 5) * 5 - 0.05;
+  }
+}
+
+const ROUNDING_LABEL: Record<MarketplaceRoundingRule, string> = {
+  exact: "Exact",
+  nearest_1: "Nearest 1",
+  nearest_5: "Nearest 5",
+  nearest_10: "Nearest 10",
+  charm_down: "Charm (…95)",
+};
+
+const SELL_MODE_LABEL: Record<SellMode, string> = {
+  by_weight: "By weight",
+  by_piece: "By piece",
+  by_pack: "By pack",
+};
+
+const BASE_UNITS_BY_MODE: Record<SellMode, string[]> = {
+  by_weight: ["kg", "g", "l", "ml"],
+  by_piece: ["piece"],
+  by_pack: ["pack"],
+};
+
+/**
+ * Payload the editor emits alongside the product upsert when the admin
+ * checks "Update pricing" and fills the pricing block. Consumed by the
+ * outer save mutation which routes it to fn_marketplace_write_price_version.
+ */
+export interface PricingSubmission {
+  costRateKes: number;
+  /** Provide EITHER markupPct OR shelfRateKes. If both, shelf wins. */
+  markupPct?: number | null;
+  shelfRateKes?: number | null;
+  roundingRule?: MarketplaceRoundingRule | null;
+  changeReason?: string;
+}
 
 /** New units get a client-generated placeholder id; adminReplaceUnits uses
  * upsert so rows with a fresh UUID land as inserts. */
@@ -66,20 +132,19 @@ function blankDraft(categoryId: string): AdminProduct {
     isFeatured: false,
     keywords: [],
     published: false,
+    // Pricing engine defaults (spec §5). B-admin (Checkpoint B item 12)
+    // will replace this legacy unit-based form with a sell-mode-aware one.
+    // Until then, drafts land as by_piece/piece — the safest default that
+    // satisfies the DB CHECK constraints.
+    sellMode: "by_piece",
+    baseUnit: "piece",
+    minQty: 1,
+    qtyStep: 1,
+    avgUnitWeightKg: null,
+    packContentsLabel: null,
+    taxTreatment: null,
+    currentPrice: null,
   };
-}
-
-/** effectivePriceFor mirrors the SQL function marketplace_effective_price. */
-function effectivePriceFor(
-  unitId: string,
-  basePriceKes: number,
-  schedules: ScheduledPrice[],
-  onDate: string,
-): number {
-  const applicable = schedules
-    .filter((s) => s.productUnitId === unitId && s.effectiveFrom <= onDate)
-    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
-  return applicable[0]?.priceKes ?? basePriceKes;
 }
 
 function CatalogAdmin() {
@@ -93,14 +158,8 @@ function CatalogAdmin() {
     queryKey: ["admin", "categories"],
     queryFn: adminListCategories,
   });
-  const { data: schedules = [] } = useQuery({
-    queryKey: ["admin", "schedules"],
-    queryFn: adminListSchedules,
-  });
-
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ["admin", "products"] });
-    qc.invalidateQueries({ queryKey: ["admin", "schedules"] });
     qc.invalidateQueries({ queryKey: ["products"] });
   };
 
@@ -115,7 +174,13 @@ function CatalogAdmin() {
   const openNew = () => setEditing(blankDraft(categories[0]?.id ?? ""));
 
   const saveProduct = useMutation({
-    mutationFn: async (p: AdminProduct) => {
+    mutationFn: async ({
+      product: p,
+      pricing,
+    }: {
+      product: AdminProduct;
+      pricing?: PricingSubmission;
+    }) => {
       const slug = p.slug || slugify(p.name);
       const productId = await adminUpsertProduct({
         id: p.id,
@@ -129,6 +194,16 @@ function CatalogAdmin() {
         keywords: p.keywords ?? [],
         isFeatured: p.isFeatured,
         published: p.published,
+        // Pricing engine columns (spec §5) — only present in the payload
+        // when the editor set them, but a full-shape draft always includes
+        // them so pass through unconditionally.
+        sellMode: p.sellMode,
+        baseUnit: p.baseUnit,
+        minQty: p.minQty,
+        qtyStep: p.qtyStep,
+        avgUnitWeightKg: p.avgUnitWeightKg,
+        packContentsLabel: p.packContentsLabel,
+        taxTreatment: p.taxTreatment,
       });
       const unitPayload: UnitInput[] = p.units.map((u, i) => ({
         id: u.id,
@@ -141,10 +216,24 @@ function CatalogAdmin() {
         displayOrder: i,
       }));
       await adminReplaceUnits(productId, unitPayload);
+      // If the editor supplied a pricing update, write a new price version.
+      // fn_marketplace_write_price_version closes the previous current row
+      // and inserts a new one atomically. Fails loudly if e.g. cost is
+      // missing or a bad rounding rule reaches it.
+      if (pricing) {
+        await adminWritePriceVersion({
+          productId,
+          costRateKes: pricing.costRateKes,
+          markupPct: pricing.markupPct ?? null,
+          shelfRateKes: pricing.shelfRateKes ?? null,
+          roundingRule: pricing.roundingRule ?? null,
+          changeReason: pricing.changeReason ?? null,
+        });
+      }
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       invalidateAll();
-      toast.success("Saved");
+      toast.success(vars.pricing ? "Saved · price updated" : "Saved");
       setEditing(null);
     },
     onError: (e: Error) => toast.error(e.message ?? "Save failed"),
@@ -159,29 +248,14 @@ function CatalogAdmin() {
     onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
   });
 
-  const addSchedule = useMutation({
-    mutationFn: adminAddSchedule,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "schedules"] });
-      toast.success("Price scheduled");
-    },
-    onError: (e: Error) => toast.error(e.message ?? "Could not schedule"),
-  });
-
-  const removeSchedule = useMutation({
-    mutationFn: adminRemoveSchedule,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "schedules"] }),
-    onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
-  });
-
-  const save = () => {
+  const save = (pricing?: PricingSubmission) => {
     if (!editing) return;
     if (!editing.name.trim()) return toast.error("Name required");
     if (!editing.categoryId) return toast.error("Category required");
     if (editing.units.length === 0) return toast.error("At least one unit required");
     if (!editing.units.some((u) => u.isDefault))
       return toast.error("One unit must be the default");
-    saveProduct.mutate(editing);
+    saveProduct.mutate({ product: editing, pricing });
   };
 
   return (
@@ -227,8 +301,8 @@ function CatalogAdmin() {
               <tr>
                 <th className="px-5 py-3 font-semibold">Product</th>
                 <th className="px-3 py-3 font-semibold">Category</th>
-                <th className="px-3 py-3 font-semibold">Units</th>
-                <th className="px-3 py-3 text-right font-semibold">Default price</th>
+                <th className="px-3 py-3 font-semibold">Sell mode</th>
+                <th className="px-3 py-3 text-right font-semibold">Shelf price</th>
                 <th className="px-3 py-3 font-semibold">Status</th>
                 <th className="w-32 px-3 py-3"></th>
               </tr>
@@ -236,6 +310,7 @@ function CatalogAdmin() {
             <tbody>
               {filtered.map((p) => {
                 const def = p.units.find((u) => u.isDefault) ?? p.units[0];
+                const shelf = p.currentPrice?.shelfRateKes ?? def?.priceKes ?? null;
                 return (
                   <tr key={p.id} className="border-b border-divider last:border-b-0 hover:bg-background/40">
                     <td className="px-5 py-3">
@@ -250,18 +325,46 @@ function CatalogAdmin() {
                       </div>
                     </td>
                     <td className="px-3 py-3 text-ink-muted">{categories.find((c) => c.id === p.categoryId)?.name ?? "—"}</td>
-                    <td className="px-3 py-3 text-ink-muted">{p.units.length}</td>
-                    <td className="px-3 py-3 text-right font-medium tabular-nums text-ink">{def ? formatKes(def.priceKes) : "—"}</td>
+                    <td className="px-3 py-3 text-ink-muted">
+                      {SELL_MODE_LABEL[p.sellMode]} <span className="text-[11px]">· {p.baseUnit}</span>
+                    </td>
+                    <td className="px-3 py-3 text-right font-medium tabular-nums text-ink">
+                      {shelf != null ? formatKes(shelf) : "—"}
+                      {!p.currentPrice && (
+                        <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-destructive">
+                          Unpriced
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-3">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        p.published ? "bg-farm/12 text-farm" : "bg-muted text-ink-muted"
-                      }`}>
-                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                        {p.published ? "Published" : "Draft"}
-                      </span>
+                      {/* Unpriced overrides Published/Draft — an unpriced
+                          product is hidden from the storefront regardless
+                          of published flag (spec §6.3 enforced by the
+                          !inner join in marketplaceApi.getAllProducts). */}
+                      {!p.currentPrice ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          Unpriced · hidden
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                          p.published ? "bg-farm/12 text-farm" : "bg-muted text-ink-muted"
+                        }`}>
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          {p.published ? "Published" : "Draft"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-1">
+                        <Link
+                          to="/admin/product/$id/prices"
+                          params={{ id: p.id }}
+                          className="rounded-full border border-divider bg-background px-3 py-1 text-[12px] font-semibold text-ink-muted hover:border-ink/40 hover:text-ink"
+                          title="Price history"
+                        >
+                          History
+                        </Link>
                         <button
                           onClick={() => setEditing({ ...p, units: [...p.units], galleryUrls: [...p.galleryUrls] })}
                           className="rounded-full border border-divider bg-background px-3 py-1 text-[12px] font-semibold text-ink hover:border-ink/40"
@@ -301,12 +404,9 @@ function CatalogAdmin() {
         <ProductEditor
           value={editing}
           categories={categories}
-          scheduledPrices={schedules}
           onChange={setEditing}
           onSave={save}
           onClose={() => setEditing(null)}
-          onSchedule={(entry) => addSchedule.mutate(entry)}
-          onRemoveSchedule={(id) => removeSchedule.mutate(id)}
           saving={saveProduct.isPending}
         />
       )}
@@ -315,30 +415,78 @@ function CatalogAdmin() {
 }
 
 function ProductEditor({
-  value, categories, scheduledPrices,
-  onChange, onSave, onClose, onSchedule, onRemoveSchedule, saving,
+  value, categories,
+  onChange, onSave, onClose, saving,
 }: {
   value: AdminProduct;
-  categories: MarketplaceCategory[];
-  scheduledPrices: ScheduledPrice[];
+  categories: AdminCategory[];
   onChange: (p: AdminProduct) => void;
-  onSave: () => void;
+  onSave: (pricing?: PricingSubmission) => void;
   onClose: () => void;
-  onSchedule: (entry: { productUnitId: string; priceKes: number; effectiveFrom: string }) => void;
-  onRemoveSchedule: (id: string) => void;
   saving: boolean;
 }) {
   const [gallery, setGallery] = useState<string>("");
-  const [schedUnit, setSchedUnit] = useState(value.units[0]?.id ?? "");
-  const [schedPrice, setSchedPrice] = useState<number>(value.units[0]?.priceKes ?? 0);
-  const [schedFrom, setSchedFrom] = useState(new Date().toISOString().slice(0, 10));
-  const [previewDate, setPreviewDate] = useState(new Date().toISOString().slice(0, 10));
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // ── Pricing engine (spec §5) — additive block. Off by default for
+  //    routine edits (so we don't write a new price version by accident),
+  //    but FORCED ON for products that have no current price yet — those
+  //    products are invisible on the storefront (marketplace_price_versions
+  //    !inner join in marketplaceApi.getAllProducts drops them), and the
+  //    only way out is to write a price version. Toggle is disabled while
+  //    priceRequired holds.
+  const priceRequired = !value.currentPrice;
+  const [pricingEnabled, setPricingEnabled] = useState(priceRequired);
+  const [costRate, setCostRate] = useState<number | "">("");
+  const [markupPct, setMarkupPct] = useState<number | "">("");
+  const [shelfRate, setShelfRate] = useState<number | "">("");
+  /** Which side was last edited — determines what we send to the RPC. */
+  const [pricingSide, setPricingSide] = useState<"markup" | "shelf">("markup");
+  /** null means "inherit from the category cascade" — passed as NULL to the RPC. */
+  const [roundingRule, setRoundingRule] = useState<MarketplaceRoundingRule | null>(null);
+  const [changeReason, setChangeReason] = useState("");
 
   const set = (patch: Partial<AdminProduct>) => onChange({ ...value, ...patch });
   const setUnit = (id: string, patch: Partial<MarketplaceProductUnit>) =>
     onChange({ ...value, units: value.units.map((u) => (u.id === id ? { ...u, ...patch } : u)) });
+
+  // ── Live pricing math (mirrors fn_marketplace_write_price_version) ────
+  const activeCategory = categories.find((c) => c.id === value.categoryId) ?? null;
+  const inheritedRounding: MarketplaceRoundingRule =
+    activeCategory?.defaultRoundingRule ?? "nearest_5";
+  const effectiveRounding: MarketplaceRoundingRule = roundingRule ?? inheritedRounding;
+  const inheritedMarkupPct: number =
+    activeCategory?.defaultMarkupPct ?? PLATFORM_DEFAULT_MARKUP_PCT;
+
+  const costNum = typeof costRate === "number" ? costRate : 0;
+  const markupNum = typeof markupPct === "number" ? markupPct : inheritedMarkupPct;
+
+  // When "markup" side is authoritative, derive raw and shelf; when "shelf"
+  // is authoritative, raw = shelf (no rounding on our end) and effective
+  // markup back-computes.
+  const derivedShelfFromMarkup = costNum > 0 ? applyRounding(costNum * (1 + markupNum / 100), effectiveRounding) : 0;
+  const shelfNum = pricingSide === "shelf" && typeof shelfRate === "number" ? shelfRate : derivedShelfFromMarkup;
+  const effectiveMarginPct = costNum > 0 ? ((shelfNum / costNum) - 1) * 100 : 0;
+
+  // Sell-mode change → snap base_unit to the first allowed for that mode.
+  const setSellMode = (mode: SellMode) => {
+    const allowed = BASE_UNITS_BY_MODE[mode];
+    const nextBase = allowed.includes(value.baseUnit) ? value.baseUnit : allowed[0];
+    // by_pack requires a non-empty pack_contents_label (CHECK constraint).
+    // Seed one if switching in with none, so save doesn't fail on constraint.
+    const nextPackLabel =
+      mode === "by_pack" && !value.packContentsLabel ? "pack" : value.packContentsLabel;
+    // Piece/pack require integer qty_step >= 1.
+    const nextStep = mode === "by_weight" ? value.qtyStep : Math.max(1, Math.floor(value.qtyStep));
+    onChange({
+      ...value,
+      sellMode: mode,
+      baseUnit: nextBase,
+      qtyStep: nextStep,
+      packContentsLabel: nextPackLabel,
+    });
+  };
 
   const addGalleryImage = () => {
     if (!gallery.trim()) return;
@@ -366,13 +514,48 @@ function ProductEditor({
     }
   };
 
-  const schedulesForUnit = (unitId: string) =>
-    scheduledPrices
-      .filter((s) => s.productUnitId === unitId)
-      .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-
   const setDefaultUnit = (id: string) =>
     onChange({ ...value, units: value.units.map((x) => ({ ...x, isDefault: x.id === id })) });
+
+  const handleSubmit = () => {
+    if (!pricingEnabled) {
+      if (priceRequired) {
+        // Defensive — the checkbox is disabled while priceRequired holds,
+        // so this only trips if state somehow desyncs. Still worth the guard.
+        toast.error("This product has no price yet — set cost + markup or shelf before saving");
+        return;
+      }
+      onSave();
+      return;
+    }
+    // Validate before we call save — the RPC will also enforce these but
+    // failing early keeps the sheet open with clean state.
+    if (costNum <= 0) {
+      toast.error("Cost rate must be greater than 0");
+      return;
+    }
+    if (pricingSide === "shelf" && (typeof shelfRate !== "number" || shelfRate <= 0)) {
+      toast.error("Shelf price must be greater than 0");
+      return;
+    }
+    if (pricingSide === "markup"
+        && (typeof markupPct !== "number" || markupPct < 0)
+        && activeCategory?.defaultMarkupPct == null) {
+      toast.error("Enter a markup % — this category has no default to inherit");
+      return;
+    }
+    const pricing: PricingSubmission = {
+      costRateKes: costNum,
+      // Send only the side the admin last touched. If they typed markup,
+      // send markup and let the RPC round. If they typed shelf, send shelf
+      // and let the RPC back-compute the effective margin.
+      markupPct: pricingSide === "markup" ? (typeof markupPct === "number" ? markupPct : null) : null,
+      shelfRateKes: pricingSide === "shelf" ? (typeof shelfRate === "number" ? shelfRate : null) : null,
+      roundingRule: roundingRule, // null = inherit from category cascade
+      changeReason: changeReason.trim() || undefined,
+    };
+    onSave(pricing);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex bg-black/50" onClick={onClose}>
@@ -389,7 +572,7 @@ function ProductEditor({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={onSave}
+              onClick={handleSubmit}
               disabled={saving}
               className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2 text-[13px] font-semibold text-background hover:bg-ink/90 disabled:opacity-60"
             >
@@ -426,6 +609,252 @@ function ProductEditor({
               <span className="text-ink-muted">(visible on the storefront)</span>
             </label>
           </div>
+
+          {/* ── Sell mode & quantity rules (spec §5.2, §5.7) ────────── */}
+          <section className="rounded-2xl border border-divider bg-surface p-4">
+            <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
+              How is this sold?
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {(Object.keys(SELL_MODE_LABEL) as SellMode[]).map((mode) => {
+                const active = value.sellMode === mode;
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setSellMode(mode)}
+                    className={`rounded-xl border px-3 py-2 text-left text-[13px] transition-colors ${
+                      active
+                        ? "border-ink bg-ink text-background"
+                        : "border-divider bg-background text-ink hover:border-ink/40"
+                    }`}
+                  >
+                    <p className="font-semibold">{SELL_MODE_LABEL[mode]}</p>
+                    <p className={`mt-0.5 text-[11px] ${active ? "text-background/80" : "text-ink-muted"}`}>
+                      {mode === "by_weight" && "kg / g / litre"}
+                      {mode === "by_piece" && "each"}
+                      {mode === "by_pack" && "tray, bundle, pack"}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              <Field label="Base unit">
+                <select
+                  value={value.baseUnit}
+                  onChange={(e) => set({ baseUnit: e.target.value })}
+                  className={inputCls}
+                >
+                  {BASE_UNITS_BY_MODE[value.sellMode].map((u) => (
+                    <option key={u} value={u}>{u}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Minimum order">
+                <input
+                  type="number"
+                  step={value.sellMode === "by_weight" ? "0.001" : "1"}
+                  min={value.sellMode === "by_weight" ? "0.001" : "1"}
+                  value={value.minQty}
+                  onChange={(e) => set({ minQty: Number(e.target.value) || 1 })}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Step">
+                <input
+                  type="number"
+                  step={value.sellMode === "by_weight" ? "0.001" : "1"}
+                  min={value.sellMode === "by_weight" ? "0.001" : "1"}
+                  value={value.qtyStep}
+                  onChange={(e) => set({ qtyStep: Number(e.target.value) || 1 })}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+
+            {value.sellMode !== "by_weight" && (
+              <Field label={value.sellMode === "by_pack" ? "Pack contains" : "Typical weight (kg, display only)"}>
+                {value.sellMode === "by_pack" ? (
+                  <input
+                    value={value.packContentsLabel ?? ""}
+                    onChange={(e) => set({ packContentsLabel: e.target.value || null })}
+                    placeholder="tray of 30"
+                    className={inputCls}
+                  />
+                ) : (
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={value.avgUnitWeightKg ?? ""}
+                    onChange={(e) =>
+                      set({ avgUnitWeightKg: e.target.value ? Number(e.target.value) : null })
+                    }
+                    className={inputCls}
+                  />
+                )}
+              </Field>
+            )}
+          </section>
+
+          {/* ── Pricing engine (spec §5.4-5.7) ─────────────────────── */}
+          <section className="rounded-2xl border border-divider bg-surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
+                Pricing
+              </p>
+              <label className={`flex items-center gap-2 text-[12px] font-medium ${
+                priceRequired ? "text-ink-muted" : "text-ink"
+              }`}>
+                <input
+                  type="checkbox"
+                  checked={pricingEnabled}
+                  disabled={priceRequired}
+                  onChange={(e) => setPricingEnabled(e.target.checked)}
+                />
+                {priceRequired ? "Pricing required" : "Update pricing on save"}
+              </label>
+            </div>
+
+            {priceRequired && (
+              <p className="mb-3 rounded-xl bg-destructive/10 px-3 py-2 text-[12px] font-medium text-destructive">
+                This product has no current price and is <strong>hidden from the
+                storefront</strong>. Set cost + markup (or cost + shelf) below
+                before saving.
+              </p>
+            )}
+
+            {value.currentPrice && !pricingEnabled && (
+              <div className="rounded-xl border border-divider bg-background p-3 text-[13px]">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                  Current price
+                </p>
+                <p className="mt-1 font-semibold text-ink">
+                  {formatKes(value.currentPrice.shelfRateKes)} <span className="text-ink-muted">/ {value.baseUnit}</span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-ink-muted">
+                  Cost {formatKes(value.currentPrice.costRateKes)} · Frozen markup{" "}
+                  {value.currentPrice.effectiveMarkupPct}% · Rounded {ROUNDING_LABEL[value.currentPrice.roundingRule]}
+                </p>
+              </div>
+            )}
+
+            {pricingEnabled && (
+              <div className="space-y-3">
+                <Field label={`Cost per ${value.baseUnit}`}>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={costRate}
+                    onChange={(e) =>
+                      setCostRate(e.target.value === "" ? "" : Number(e.target.value))
+                    }
+                    placeholder="From consignment intake"
+                    className={inputCls}
+                  />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Markup %">
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={markupPct}
+                      onFocus={() => setPricingSide("markup")}
+                      onChange={(e) => {
+                        setPricingSide("markup");
+                        setMarkupPct(e.target.value === "" ? "" : Number(e.target.value));
+                      }}
+                      placeholder={`inherits ${inheritedMarkupPct}%`}
+                      className={inputCls}
+                    />
+                  </Field>
+                  <Field label={`Shelf per ${value.baseUnit}`}>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={shelfRate}
+                      onFocus={() => setPricingSide("shelf")}
+                      onChange={(e) => {
+                        setPricingSide("shelf");
+                        setShelfRate(e.target.value === "" ? "" : Number(e.target.value));
+                      }}
+                      placeholder={
+                        pricingSide === "markup" && costNum > 0
+                          ? formatKes(derivedShelfFromMarkup)
+                          : ""
+                      }
+                      className={inputCls}
+                    />
+                  </Field>
+                </div>
+
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <Field label="Rounding">
+                      <select
+                        value={roundingRule ?? "__inherit__"}
+                        onChange={(e) =>
+                          setRoundingRule(
+                            e.target.value === "__inherit__"
+                              ? null
+                              : (e.target.value as MarketplaceRoundingRule),
+                          )
+                        }
+                        className={inputCls}
+                      >
+                        <option value="__inherit__">
+                          Inherit from category ({ROUNDING_LABEL[inheritedRounding]})
+                        </option>
+                        {(Object.keys(ROUNDING_LABEL) as MarketplaceRoundingRule[]).map((r) => (
+                          <option key={r} value={r}>
+                            {ROUNDING_LABEL[r]}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                  {markupPct !== "" && activeCategory?.defaultMarkupPct != null && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMarkupPct(activeCategory.defaultMarkupPct!);
+                        setPricingSide("markup");
+                      }}
+                      className="rounded-full border border-divider bg-background px-3 py-2 text-[11px] font-semibold text-ink hover:border-ink/40"
+                    >
+                      Use category default
+                    </button>
+                  )}
+                </div>
+
+                <div className="rounded-xl bg-background p-3 text-[13px]">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                    Customer sees
+                  </p>
+                  <p className="mt-1 font-semibold text-ink">
+                    {formatKes(shelfNum)} <span className="text-ink-muted">/ {value.baseUnit}</span>
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-ink-muted">
+                    Margin after rounding:{" "}
+                    <span className={effectiveMarginPct < markupNum - 1 ? "text-destructive" : ""}>
+                      {effectiveMarginPct.toFixed(2)}%
+                    </span>
+                  </p>
+                </div>
+
+                <Field label="Change reason (optional, appears in audit log)">
+                  <input
+                    value={changeReason}
+                    onChange={(e) => setChangeReason(e.target.value)}
+                    placeholder="e.g. supplier price hike, promotional launch"
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
+            )}
+          </section>
 
           {/* Images */}
           <section>
@@ -513,88 +942,6 @@ function ProductEditor({
             </div>
           </section>
 
-          {/* Price scheduler */}
-          <section>
-            <p className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
-              <CalendarClock className="h-3.5 w-3.5" /> Effective-dated pricing
-            </p>
-            <div className="rounded-xl border border-divider bg-surface p-3">
-              <div className="grid grid-cols-[1fr_120px_150px_auto] items-end gap-2">
-                <Field label="Unit">
-                  <select value={schedUnit} onChange={(e) => setSchedUnit(e.target.value)} className={inputCls}>
-                    {value.units.map((u) => <option key={u.id} value={u.id}>{u.unitLabel}</option>)}
-                  </select>
-                </Field>
-                <Field label="New price">
-                  <input type="number" value={schedPrice} onChange={(e) => setSchedPrice(Number(e.target.value) || 0)} className={inputCls} />
-                </Field>
-                <Field label="Effective from">
-                  <input type="date" value={schedFrom} onChange={(e) => setSchedFrom(e.target.value)} className={inputCls} />
-                </Field>
-                <button
-                  onClick={() => {
-                    if (!schedUnit) return toast.error("Save the product first, then schedule");
-                    onSchedule({ productUnitId: schedUnit, priceKes: schedPrice, effectiveFrom: schedFrom });
-                  }}
-                  className="rounded-full bg-trust px-4 py-2 text-[12px] font-semibold text-trust-foreground"
-                >
-                  Schedule
-                </button>
-              </div>
-
-              <div className="mt-3 space-y-1.5">
-                {value.units.flatMap((u) => schedulesForUnit(u.id).map((sp) => ({ u, sp }))).map(({ u, sp }) => (
-                  <div key={sp.id} className="flex items-center justify-between rounded-lg bg-background px-3 py-2 text-[12px]">
-                    <span className="text-ink-muted">
-                      <span className="font-semibold text-ink">{u.unitLabel}</span> → <span className="font-semibold text-ink">{formatKes(sp.priceKes)}</span> from {sp.effectiveFrom}
-                    </span>
-                    <button onClick={() => onRemoveSchedule(sp.id)} className="text-ink-muted hover:text-destructive">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-                {scheduledPrices.filter((s) => value.units.some((u) => u.id === s.productUnitId)).length === 0 && (
-                  <p className="text-[11px] text-ink-muted">No scheduled price changes for this product.</p>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-xl border border-divider bg-surface p-3">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[12px] font-semibold text-ink">Price on date</p>
-                <input
-                  type="date"
-                  value={previewDate}
-                  onChange={(e) => setPreviewDate(e.target.value)}
-                  className={inputCls + " w-[150px]"}
-                />
-              </div>
-              <ul className="mt-2 divide-y divide-divider">
-                {value.units.map((u) => {
-                  const price = effectivePriceFor(u.id, u.priceKes, scheduledPrices, previewDate);
-                  const isScheduled = price !== u.priceKes;
-                  return (
-                    <li key={u.id} className="flex items-center justify-between py-1.5 text-[12px]">
-                      <span className="text-ink-muted">{u.unitLabel}</span>
-                      <span className="flex items-baseline gap-2">
-                        <span className={`font-semibold tabular-nums ${isScheduled ? "text-trust-deep" : "text-ink"}`}>
-                          {formatKes(price)}
-                        </span>
-                        {isScheduled && (
-                          <span className="rounded-full bg-trust/12 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-trust-deep">
-                            Scheduled
-                          </span>
-                        )}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="mt-1 text-[11px] text-ink-muted">
-                Preview mirrors the SQL function marketplace_effective_price the storefront uses.
-              </p>
-            </div>
-          </section>
         </div>
       </div>
     </div>
