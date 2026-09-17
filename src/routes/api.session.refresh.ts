@@ -56,7 +56,15 @@ export const Route = createFileRoute("/api/session/refresh")({
       POST: async ({ request }) => {
         const refreshToken = parseCookie(request.headers.get("cookie"), COOKIE_NAME);
         if (!refreshToken) {
-          return jsonResponse({ error: "no session cookie" }, { status: 401 });
+          // Audit finding M1: always send Set-Cookie: expire on 401 so a
+          // half-set or corrupt cookie doesn't linger in the browser and
+          // cause every subsequent silentRefresh to repeat the same dance.
+          // For the "no cookie" branch this is a no-op if genuinely absent
+          // (the browser has nothing to expire) but harmless.
+          return jsonResponse(
+            { error: "no session cookie" },
+            { status: 401, headers: { "set-cookie": expireCookie() } },
+          );
         }
         if (!supabaseUrl || !supabaseAnonKey) {
           return jsonResponse({ error: "server misconfigured" }, { status: 500 });

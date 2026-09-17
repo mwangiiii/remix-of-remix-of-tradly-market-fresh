@@ -25,6 +25,7 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { api } from "@/services/api";
 import { getSupabase } from "@/lib/supabase";
+import { trackEvent } from "@/lib/analytics";
 
 const JUST_LOGGED_OUT = "__tradly_market_just_logged_out";
 const LOGOUT_REASON = "__tradly_market_logout_reason";
@@ -48,14 +49,38 @@ if (typeof window !== "undefined") {
 }
 
 async function storeMagicRefresh(refreshToken: string): Promise<void> {
+  // Audit finding H4: previously this swallowed every failure. A non-2xx
+  // (e.g. 400 from the store endpoint's length validation) meant the
+  // httpOnly cookie was never written, so the session died on the next
+  // reload — with zero signal to the caller. We now:
+  //   - Distinguish network errors (fetch throws) from HTTP errors (res.ok false)
+  //   - console.warn with status + body so it shows up in remote-debug traces
+  //   - trackEvent("auth_session_store_failed") so ops has metrics
   try {
-    await fetch("/api/session/store", {
+    const res = await fetch("/api/session/store", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
       credentials: "same-origin",
     });
-  } catch { /* network hiccup — session works this tab, dies on reload */ }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "<no body>");
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[auth] /api/session/store returned ${res.status}: ${body}. ` +
+        `The magic-link session will die on next reload.`,
+      );
+      trackEvent("auth_session_store_failed", { status: res.status });
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[auth] /api/session/store threw (network error). " +
+      "The magic-link session works this tab but dies on reload.",
+      err,
+    );
+    trackEvent("auth_session_store_failed", { status: 0 });
+  }
 }
 
 type SessionRefreshResult = { access_token: string; expires_in: number } | null;
@@ -505,12 +530,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (reason = "user_requested") => {
       try {
         setIsLoading(true);
-        // Also revoke the Supabase-side session for magic-link users so the
-        // stored refresh_token becomes unusable immediately. Clearing the
-        // cookie in parallel — either succeeding is enough.
+        // Belt-and-braces server-side revoke (audit finding C2). Three
+        // parallel best-effort calls:
+        //  - clearMagicRefreshCookie: expires market's own tradly_market_refresh
+        //  - getSupabase().auth.signOut: kills the in-memory Supabase session
+        //  - api.post("/auth-logout"): revokes the Supabase refresh_token
+        //    server-side via /functions/v1/auth-logout AND expires the
+        //    tradly_refresh cookie (set by /auth-login for password users).
+        //    Without this call the server-side refresh_token remained valid
+        //    for its 30-day lifetime after "logout".
         await Promise.allSettled([
           clearMagicRefreshCookie(),
           getSupabase().auth.signOut(),
+          api.post("/auth-logout", {}).catch(() => { /* idempotent by design */ }),
         ]);
         clearAuthState();
         queryClient.clear();
