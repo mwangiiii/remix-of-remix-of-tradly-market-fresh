@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
+import { friendlyError } from "../marketplace/lib/friendlyError";
 import { useAuth } from "@/hooks/use-auth";
 import {
   deleteRecurringBasket,
@@ -183,7 +184,7 @@ function BasketCard({
       qc.invalidateQueries({ queryKey: ["recurring-baskets"] });
       toast.success("Skipped");
     },
-    onError: (e: Error) => toast.error(e.message ?? "Skip failed"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not skip this basket. Please try again.")),
   });
 
   const del = useMutation({
@@ -192,7 +193,7 @@ function BasketCard({
       qc.invalidateQueries({ queryKey: ["recurring-baskets"] });
       toast.success("Deleted");
     },
-    onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not delete this basket. Please try again.")),
   });
 
   const pause = useMutation({
@@ -201,7 +202,7 @@ function BasketCard({
       qc.invalidateQueries({ queryKey: ["recurring-baskets"] });
       toast.success("Updated");
     },
-    onError: (e: Error) => toast.error(e.message ?? "Pause failed"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not pause this basket. Please try again.")),
   });
 
   const paused = basket.pauseUntil && new Date(basket.pauseUntil) > new Date();
@@ -343,7 +344,7 @@ function BasketEditor({
       toast.success("Saved");
       onClose();
     },
-    onError: (e: Error) => toast.error(e.message ?? "Save failed"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not save. Please try again.")),
   });
 
   return (
@@ -493,7 +494,7 @@ function ConfirmDialog({
       toast.success("Redirecting to Paystack…");
       window.location.href = res.paystack_authorization_url;
     },
-    onError: (e: Error) => toast.error(e.message ?? "Could not start checkout"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not start checkout. Please try again.")),
   });
 
   return (

@@ -25,6 +25,7 @@ import { submitConsumerOrder } from "../marketplace/api/consumerOrders";
 import { listMyCreditBalance, totalSpendable } from "../marketplace/api/credit";
 import { getSupabase } from "@/lib/supabase";
 import { formatKes } from "../marketplace/lib/format";
+import { friendlyError } from "../marketplace/lib/friendlyError";
 import { useAuth } from "@/hooks/use-auth";
 import type {
   CartLine,
@@ -190,8 +191,7 @@ function CompanyCheckout({ lines }: { lines: CartLine[] }) {
       toast.success(`Order ${requestNumber} submitted`);
       navigate({ to: "/order/$id/confirmation", params: { id }, search: { pr: requestNumber } });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not submit. Try again.";
-      toast.error(msg);
+      toast.error(friendlyError(e, "Couldn't send your order. Please try again."));
       console.error(e);
     } finally {
       setSubmitting(false);
@@ -522,7 +522,7 @@ function HouseholdCheckout({ lines }: { lines: CartLine[] }) {
       if (code === "CART_HAS_ERRORS") {
         setCartErrors("Some items are no longer available — please review your cart.");
       } else {
-        toast.error(anyErr.message ?? "Could not start checkout. Try again.");
+        toast.error(friendlyError(err, "Couldn't start checkout. Please try again."));
       }
       setSubmitting(false);
     }

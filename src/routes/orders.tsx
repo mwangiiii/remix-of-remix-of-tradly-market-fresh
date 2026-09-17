@@ -9,7 +9,8 @@ import { useCartStore } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
-import { RotateCw } from "lucide-react";
+import { RotateCw, Receipt } from "lucide-react";
+import { EmptyState } from "../marketplace/components/EmptyState";
 
 export const Route = createFileRoute("/orders")({
   head: () => ({
@@ -44,7 +45,12 @@ function Orders() {
         <TrustHeader title="Your orders" back="/" />
 
         {orders.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">No orders yet.</p>
+          <EmptyState
+            icon={Receipt}
+            title="No orders yet"
+            description="When you place your first order, you'll be able to see it here — and reorder in one tap."
+            primary={{ label: "Start shopping", to: "/" }}
+          />
         ) : (
           <ul className="mt-4 space-y-3">
             {orders.map((o) => (

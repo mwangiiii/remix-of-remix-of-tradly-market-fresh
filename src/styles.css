@@ -106,6 +106,35 @@
     -webkit-font-smoothing: antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+
+  /* Accessibility baseline (audit A11y-5).
+     Every interactive element gets a visible keyboard-focus ring by
+     default — many of our custom-styled buttons/links opted out with
+     focus:outline-none but never added focus-visible:ring. This is the
+     backstop that keeps keyboard + screen-reader users from getting
+     lost. Uses focus-visible so mouse clicks don't paint the ring.
+     Radius matches our default component rounding. */
+  :where(button, [role="button"], a, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-ring, currentColor);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Respect prefers-reduced-motion. Some buyers (especially older
+     phones with lower-frame-rate screens) have this enabled in their OS
+     to reduce motion sickness. Kill our transition/animation flourishes
+     for them; leave functional feedback (opacity, colour) alone via
+     Tailwind's motion-safe: utility. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 @utility soft-shadow {

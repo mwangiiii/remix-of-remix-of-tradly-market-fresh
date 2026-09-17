@@ -19,6 +19,7 @@ import { format } from "date-fns";
 import { ArrowUpRight, BanknoteArrowUp, Gift, Loader2 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
+import { friendlyError } from "../marketplace/lib/friendlyError";
 import { useAuth } from "@/hooks/use-auth";
 import {
   createRefundRequest,
@@ -84,7 +85,7 @@ function CreditPage() {
       qc.invalidateQueries({ queryKey: ["refund-requests"] });
       toast.success("Refund request sent — ops will process shortly.");
     },
-    onError: (e: Error) => toast.error(e.message ?? "Could not request refund"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not send your refund request. Please try again.")),
   });
 
   // Index refund_requests by the credit they reference so we can render

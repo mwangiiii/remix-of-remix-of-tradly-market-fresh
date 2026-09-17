@@ -39,7 +39,11 @@ function Login() {
     isLoading, isAuthenticated, isInitializing, error,
   } = useAuth();
 
-  const [channel, setChannel] = useState<Channel>("email");
+  // Default to the magic-link path: households (our biggest audience) don't
+  // have a password yet on first visit, and asking a new smartphone user to
+  // pick a password on-screen is friction. Companies who prefer their
+  // existing password can tap "Password" one time.
+  const [channel, setChannel] = useState<Channel>("magic");
 
   // Email / signup fields
   const [email, setEmail] = useState("");
@@ -132,7 +136,10 @@ function Login() {
 
         {/* Channel toggle chips */}
         <div className="mt-5 flex justify-center gap-1.5" role="tablist">
-          {(["email", "magic", "signup"] as Channel[]).map((c) => {
+          {/* Order matters: magic-link first (household default), then
+              password (companies who already have one), then signup
+              (company workspace onboarding). */}
+          {(["magic", "email", "signup"] as Channel[]).map((c) => {
             const isActive = channel === c;
             const label = c === "email" ? "Password" : c === "magic" ? "Email link" : "New workspace";
             return (
@@ -234,9 +241,14 @@ function Login() {
               required
               placeholder="e.g. Grace Muthoni"
             />
-            <p className="rounded-xl border border-divider bg-surface px-3 py-3 text-[12px] text-ink-muted">
-              We'll email you a link — click it to sign in. New here? We'll set up your individual account.
-            </p>
+            <div className="rounded-xl border border-divider bg-surface px-4 py-3 text-[12.5px] text-ink-muted">
+              <p className="font-semibold text-ink">How it works</p>
+              <ol className="mt-2 space-y-1.5 pl-4">
+                <li className="list-decimal">We send a sign-in link to your email.</li>
+                <li className="list-decimal">Tap the link from your phone. That's it — no password to remember.</li>
+                <li className="list-decimal">First time? Your account is created automatically.</li>
+              </ol>
+            </div>
 
             {error && <ErrorBox message={error.message} />}
 
@@ -259,12 +271,12 @@ function Login() {
               <div className="min-w-0 flex-1">
                 <p className="text-[14px] font-semibold text-ink">Check your email</p>
                 <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
-                  We sent a sign-in link to{" "}
+                  We sent your sign in link to{" "}
                   <span className="font-semibold text-ink">{magicEmail}</span>.
-                  Click it from any device — you'll be signed in automatically.
+                  Tap the link to sign in.
                 </p>
                 <p className="mt-2 text-[11.5px] text-ink-muted">
-                  The link expires in 60 minutes. Didn't get it?{" "}
+                  The link works for 15 minutes. Didn't get it?{" "}
                   <button
                     type="button"
                     onClick={submitMagicLink}
