@@ -13,13 +13,46 @@
 // All of the above lives in AuthProvider.completeMagicLink() — this route
 // is just the trigger + a friendly loading/error surface.
 
-import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, Mail } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { useAuth } from "@/hooks/use-auth";
+import { friendlyError } from "../marketplace/lib/friendlyError";
+
+/**
+ * Parse the URL hash fragment Supabase uses to signal auth errors. Format:
+ *   #error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired
+ * We handle this BEFORE calling completeMagicLink so a friendly, specific
+ * message shows up instead of Supabase's raw error text.
+ */
+function parseHashError(hash: string): { code: string | null; description: string | null } {
+  if (!hash || hash.length < 2) return { code: null, description: null };
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  if (!params.get("error")) return { code: null, description: null };
+  return {
+    code: params.get("error_code"),
+    description: params.get("error_description")?.replace(/\+/g, " ") ?? null,
+  };
+}
+
+/** Translate Supabase auth error codes into plain-English messages. */
+function messageForHashError(code: string | null, description: string | null): string {
+  switch (code) {
+    case "otp_expired":
+      return "This sign-in link has expired. Links only work for 15 minutes — please request a new one.";
+    case "otp_disabled":
+      return "This sign-in link has already been used. For your safety, each link only works once.";
+    case "access_denied":
+      return "This sign-in link is no longer valid. Please request a fresh one.";
+    default:
+      return description
+        ? friendlyError(description, "This sign-in link didn't work. Please request a new one.")
+        : "This sign-in link didn't work. Please request a new one.";
+  }
+}
 
 const searchSchema = z.object({ next: z.string().optional() });
 
@@ -49,14 +82,25 @@ function AuthCallback() {
     if (ranRef.current) return;
     ranRef.current = true;
 
+    // Supabase can signal errors via the URL fragment BEFORE any token
+    // exchange (e.g. otp_expired, otp_disabled, access_denied). Catch those
+    // first and surface a specific message — otherwise completeMagicLink()
+    // would fail with an opaque "no session" error.
+    const hashErr =
+      typeof window !== "undefined" ? parseHashError(window.location.hash) : { code: null, description: null };
+    if (hashErr.code || hashErr.description) {
+      setErrorMessage(messageForHashError(hashErr.code, hashErr.description));
+      setStatus("error");
+      return;
+    }
+
     (async () => {
       try {
         const result = await completeMagicLink();
         toast.success(result.new ? "Account created" : "Signed in");
         navigate({ to: next ?? "/account" });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        setErrorMessage(message);
+        setErrorMessage(friendlyError(err, "This sign-in link didn't work. Please request a new one."));
         setStatus("error");
       }
     })();
@@ -76,21 +120,32 @@ function AuthCallback() {
         )}
 
         {status === "error" && (
-          <div className="mx-auto max-w-sm flex flex-col items-center gap-3 text-center">
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 text-red-700">
-              <AlertTriangle className="h-5 w-5" aria-hidden />
+          <div className="mx-auto max-w-sm flex flex-col items-center gap-4 text-center">
+            <div className="grid h-14 w-14 place-items-center rounded-full bg-ripe/12 text-ripe" aria-hidden>
+              <AlertTriangle className="h-6 w-6" strokeWidth={1.75} />
             </div>
-            <p className="text-[15px] font-semibold text-ink">Sign-in link didn't work</p>
-            <p className="text-[12.5px] text-ink-muted">
-              {errorMessage ?? "The link may have expired or already been used."}
-            </p>
+            <div>
+              <h2 className="text-[17px] font-semibold text-ink lg:text-[19px]">
+                That link didn't work
+              </h2>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-ink-muted">
+                {errorMessage ?? "The link may have expired or already been used."}
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => navigate({ to: "/login" })}
-              className="mt-2 rounded-full bg-trust px-5 py-2.5 text-[13px] font-semibold text-trust-foreground"
+              className="mt-1 inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-[14px] font-semibold text-background shadow-sm hover:bg-ink/90"
             >
-              Back to sign in
+              <Mail className="h-4 w-4" aria-hidden />
+              Send a new link
             </button>
+            <Link
+              to="/"
+              className="text-[12.5px] font-medium text-ink-muted hover:text-ink"
+            >
+              Continue browsing without signing in
+            </Link>
           </div>
         )}
       </div>

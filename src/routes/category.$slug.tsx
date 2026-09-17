@@ -1,8 +1,10 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { PackageOpen } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { BrowseHeader } from "../marketplace/components/BrowseHeader";
 import { CategoryPillRow } from "../marketplace/components/CategoryPillRow";
+import { EmptyState } from "../marketplace/components/EmptyState";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { SearchBar } from "../marketplace/components/SearchBar";
 import { ProductGridSkeleton } from "../marketplace/components/Skeletons";
@@ -121,10 +123,13 @@ function CategoryView() {
             <ProductGridSkeleton count={8} />
           </div>
         ) : products.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">
-            No items yet in this category.{" "}
-            <Link to="/" className="font-semibold text-ink underline underline-offset-4">Browse home</Link>
-          </p>
+          <EmptyState
+            icon={PackageOpen}
+            title="Nothing here yet"
+            description="We haven't stocked this category yet. Try another category, or browse everything."
+            primary={{ label: "All products", to: "/products" }}
+            secondary={{ label: "Back home", to: "/" }}
+          />
         ) : (
           <div className="grid grid-cols-2 gap-4 pt-5 md:grid-cols-3 lg:grid-cols-4 lg:gap-6 lg:pt-8">
             {products.map((p) => <ProductCard key={p.id} product={p} />)}

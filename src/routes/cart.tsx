@@ -7,8 +7,10 @@ import { QuantityStepper } from "../marketplace/components/QuantityStepper";
 import { useCartStore, cartSubtotal } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
 import { X, BookmarkPlus, RefreshCcw, ShoppingBag, RefreshCw } from "lucide-react";
+import { EmptyState } from "../marketplace/components/EmptyState";
 import { toast } from "sonner";
 import { createSavedList } from "../marketplace/api/marketplaceApi";
+import { friendlyError } from "../marketplace/lib/friendlyError";
 import { upsertRecurringBasket } from "../marketplace/api/recurringBaskets";
 import { useAuth } from "@/hooks/use-auth";
 import { NameDialog } from "../marketplace/components/NameDialog";
@@ -50,6 +52,10 @@ function Cart() {
   const removeLine = useCartStore((s) => s.removeLine);
   const subtotal = cartSubtotal(lines);
   const { isAuthenticated, buyer } = useAuth();
+  // isCompany drives the B2B vs household copy split (eTIMS, PO, VAT
+  // language stays for company buyers; households see plain words).
+  // Anonymous browsers default to household copy — safest for onboarding.
+  const isCompany = buyer?.businessType === "company";
   const [savePromptOpen, setSavePromptOpen] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
 
@@ -121,7 +127,7 @@ function Cart() {
         },
       );
     },
-    onError: (e: Error) => toast.error(e.message ?? "Could not save list"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not save the list. Please try again.")),
   });
 
   const handleSaveList = () => {
@@ -171,7 +177,7 @@ function Cart() {
         action: { label: "View", onClick: () => navigate({ to: "/account/recurring" }) },
       });
     },
-    onError: (e: Error) => toast.error(e.message ?? "Save failed"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not save. Please try again.")),
   });
 
   const suggestedCartName = `Cart · ${new Date().toLocaleDateString("en-KE", { day: "numeric", month: "short" })}`;
@@ -192,21 +198,12 @@ function Cart() {
         </div>
 
         {lines.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 py-24 text-center">
-            <div className="grid h-16 w-16 place-items-center rounded-full bg-muted">
-              <ShoppingBag className="h-7 w-7 text-ink-muted" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-ink">Nothing here yet</h2>
-              <p className="mt-1 text-sm text-ink-muted">Start with today's fresh picks.</p>
-            </div>
-            <Link
-              to="/"
-              className="rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-background"
-            >
-              Browse the market
-            </Link>
-          </div>
+          <EmptyState
+            icon={ShoppingBag}
+            title="Your cart is empty"
+            description="Add fresh vegetables, fruits, milk, rice and more — everything gets delivered to your door."
+            primary={{ label: "Browse the market", to: "/" }}
+          />
         ) : (
           <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-10">
             <div>
@@ -306,8 +303,12 @@ function Cart() {
                 )}
               </div>
 
+              {/* Persona-aware footnote. Households never need to think
+                  about eTIMS or POs — that's B2B accounting language. */}
               <p className="mt-6 text-[11px] leading-relaxed text-ink-muted lg:text-[12px]">
-                VAT and eTIMS invoice are calculated when Tradly Finance issues your PO.
+                {isCompany
+                  ? "VAT and eTIMS invoice are calculated when Tradly Finance issues your PO."
+                  : "Delivery fee is added at checkout, based on where we're sending your order."}
               </p>
             </div>
 
@@ -327,14 +328,21 @@ function Cart() {
                   <dt>Subtotal</dt>
                   <dd className="tabular-nums text-ink">{formatKes(subtotal)}</dd>
                 </div>
-                <div className="flex justify-between text-ink-muted">
-                  <dt>VAT</dt>
-                  <dd>at invoice</dd>
-                </div>
+                {isCompany ? (
+                  <div className="flex justify-between text-ink-muted">
+                    <dt>VAT</dt>
+                    <dd>at invoice</dd>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-ink-muted">
+                    <dt>Delivery</dt>
+                    <dd>added at checkout</dd>
+                  </div>
+                )}
               </dl>
               <div className="mt-5 flex items-baseline justify-between border-t border-divider pt-4">
                 <span className="text-[13px] font-medium uppercase tracking-wide text-ink-muted">
-                  Estimated
+                  {isCompany ? "Estimated" : "So far"}
                 </span>
                 <span className="text-[22px] font-semibold tabular-nums text-ink">
                   {formatKes(subtotal)}
@@ -345,7 +353,7 @@ function Cart() {
                 onClick={() => navigate({ to: "/checkout" })}
                 className="mt-5 w-full rounded-full bg-ink px-5 py-3.5 text-[14px] font-semibold text-background transition hover:bg-ink/90"
               >
-                Continue to Purchase Order
+                {isCompany ? "Continue to Purchase Order" : "Checkout"}
               </button>
             </aside>
           </div>
@@ -369,7 +377,7 @@ function Cart() {
               onClick={() => navigate({ to: "/checkout" })}
               className="flex-1 rounded-full bg-ink px-5 py-3 text-[14px] font-semibold text-background shadow-sm"
             >
-              Continue
+              {isCompany ? "Continue" : "Checkout"}
             </button>
           </div>
         </div>

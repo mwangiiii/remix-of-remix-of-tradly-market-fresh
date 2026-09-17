@@ -7,6 +7,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Home, MapPin, Plus, Star, Trash2, X, Loader2 } from "lucide-react";
+import { EmptyState } from "../marketplace/components/EmptyState";
+import { friendlyError } from "../marketplace/lib/friendlyError";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
 import { useAuth } from "@/hooks/use-auth";
@@ -117,9 +119,12 @@ function AddressesPage() {
             </li>
           )}
           {!addressesLoading && addresses.length === 0 && (
-            <li className="rounded-2xl border border-dashed border-divider py-10 text-center text-[13px] text-ink-muted">
-              <Home className="mx-auto mb-2 h-6 w-6 opacity-60" />
-              No addresses yet. Add one so the rider knows where to bring your order.
+            <li>
+              <EmptyState
+                icon={Home}
+                title="No addresses yet"
+                description="Add where you'd like your orders delivered — a home, an office, a shop. You can add more than one."
+              />
             </li>
           )}
           {addresses.map((a) => (
@@ -180,7 +185,7 @@ function AddressCard({
       invalidate();
       toast.success("Deleted");
     },
-    onError: (e: Error) => toast.error(e.message ?? "Delete failed"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not delete this address. Please try again.")),
   });
 
   const setDefault = useMutation({
@@ -189,7 +194,7 @@ function AddressCard({
       invalidate();
       toast.success("Default updated");
     },
-    onError: (e: Error) => toast.error(e.message ?? "Could not set default"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not set as default. Please try again.")),
   });
 
   return (
@@ -283,7 +288,7 @@ function AddressEditor({
       toast.success(value.id ? "Updated" : "Address added");
       onChange(null);
     },
-    onError: (e: Error) => toast.error(e.message ?? "Save failed"),
+    onError: (e: Error) => toast.error(friendlyError(e, "Could not save this address. Please try again.")),
   });
 
   const submit = () => {

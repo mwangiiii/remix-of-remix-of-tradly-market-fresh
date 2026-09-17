@@ -378,6 +378,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const supabase = getSupabase();
 
+      // 0. Pre-clear ANY existing session before consuming the new tokens.
+      //
+      // Scenario this defends against: someone was already signed in on
+      // this browser (e.g. an admin via /auth-login, or a previous magic
+      // link for a different account) and clicks a fresh magic link. The
+      // old session's httpOnly refresh cookie could win a race against
+      // the new session (bootstrap silentRefresh, focus refresh, page
+      // reload) and pollute buyer state — user sees their name on top
+      // and someone else's business rows below.
+      //
+      // We wipe both cookie families (magic-link market cookie AND the
+      // /auth-login supabase.co cookie via signOut), the in-memory
+      // Supabase session, our own useAuthStore, buyer state, and the
+      // React Query cache. Then and only then do we install the new
+      // session. Errors here are swallowed — if a cookie was already
+      // absent, cleanup is a no-op.
+      await Promise.allSettled([
+        clearMagicRefreshCookie(),
+        supabase.auth.signOut(),
+      ]);
+      clearAuthState();
+      queryClient.clear();
+
       // 1. Parse the hash fragment
       const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
       const params = new URLSearchParams(hash);
@@ -475,7 +498,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [setTokens]);
+  }, [clearAuthState, queryClient, setTokens]);
 
   // ── logout ──────────────────────────────────────────────────────────────
   const logout = useCallback(
@@ -509,6 +532,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── bootstrap once (client-only) ────────────────────────────────────────
   useEffect(() => {
+    // If the URL is /auth/callback with a hash-token payload, the magic-link
+    // handler owns the entire session setup. Running silentRefresh here
+    // would race against completeMagicLink AND pollute buyer state with the
+    // PREVIOUS user's session (via the still-live httpOnly refresh cookie).
+    // Just mark bootstrap done and let AuthCallback take it from here.
+    if (
+      typeof window !== "undefined" &&
+      window.location.pathname === "/auth/callback" &&
+      window.location.hash.includes("access_token=")
+    ) {
+      setIsInitializing(false);
+      useAuthStore.getState().setInitialized();
+      return;
+    }
     silentRefresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -23,6 +23,7 @@ import {
   ShoppingBag,
   Trash2,
 } from "lucide-react";
+import { EmptyState } from "../marketplace/components/EmptyState";
 import type { CartLine, SavedList } from "../marketplace/types/marketplace";
 
 type Dialog =
@@ -199,13 +200,12 @@ function Lists() {
             ))}
           </ul>
         ) : lists.length === 0 ? (
-          <div className="mt-10 rounded-2xl border border-dashed border-divider bg-surface py-10 text-center">
-            <ListPlus className="mx-auto h-6 w-6 text-ink-muted" />
-            <p className="mt-3 text-[13px] font-semibold text-ink">No saved lists yet</p>
-            <p className="mt-1 px-8 text-[12px] text-ink-muted">
-              Create a fresh list, or save the items currently in your cart.
-            </p>
-          </div>
+          <EmptyState
+            icon={ListPlus}
+            title="No saved lists yet"
+            description="Save a shopping list to reorder in one tap — perfect for weekly groceries."
+            primary={{ label: "Browse the market", to: "/" }}
+          />
         ) : (
           <ul className="mt-4 space-y-3">
             {lists.map((l) => (

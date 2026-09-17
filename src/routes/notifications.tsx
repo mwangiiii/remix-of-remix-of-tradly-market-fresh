@@ -4,7 +4,8 @@ import { formatDistanceToNow } from "date-fns";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
 import { getNotifications } from "../marketplace/api/marketplaceApi";
-import { Bell } from "lucide-react";
+import { Bell, BellOff } from "lucide-react";
+import { EmptyState } from "../marketplace/components/EmptyState";
 
 export const Route = createFileRoute("/notifications")({
   head: () => ({ meta: [{ title: "Notifications — Tradly Market" }, { name: "robots", content: "noindex" }] }),
@@ -20,7 +21,12 @@ function Notifications() {
         <TrustHeader title="Notifications" back="/" />
 
         {data.length === 0 ? (
-          <p className="py-16 text-center text-sm text-ink-muted">Nothing new.</p>
+          <EmptyState
+            icon={BellOff}
+            title="Nothing new"
+            description="Updates about your orders and refunds show up here."
+            primary={{ label: "Back home", to: "/" }}
+          />
         ) : (
           <ul className="mt-4 space-y-2">
             {data.map((n) => (
