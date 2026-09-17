@@ -12,12 +12,22 @@ export interface AuthError {
   isRecoverable: boolean;
 }
 
+export type BusinessType = "company" | "individual" | "supplier_vendor";
+
 export interface Buyer {
   id: string;
   email: string;
   fullName?: string;
   businessId: string | null;
   role: string;
+  /**
+   * Discriminator from the JWT's `business_type` claim (Household Commerce
+   * spec §4.2). Drives persona branching in checkout, /account, and the
+   * consumer-order pipeline. Falls back to "company" if the claim is absent
+   * — matches the hook's own COALESCE default and the safest assumption
+   * (the pre-household-commerce flow).
+   */
+  businessType: BusinessType;
 }
 
 export interface SignupInput {

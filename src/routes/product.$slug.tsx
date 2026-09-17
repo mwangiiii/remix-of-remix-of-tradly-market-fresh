@@ -59,7 +59,13 @@ export const Route = createFileRoute("/product/$slug")({
         scripts: [],
       };
     }
-    const price = p.units.find((u) => u.isDefault)?.priceKes ?? p.units[0]?.priceKes ?? 0;
+    // Pricing engine (spec §5): shelf comes from marketplace_price_versions.
+    // Legacy unit price is a belt-and-braces fallback only.
+    const price =
+      p.currentPrice?.shelfRateKes ??
+      p.units.find((u) => u.isDefault)?.priceKes ??
+      p.units[0]?.priceKes ??
+      0;
     const title = `${p.name} — ${SITE_NAME}`;
     const ogTitle = `${p.name} — ${formatKes(price)}`;
     const category = data?.category;
@@ -142,6 +148,16 @@ function ProductDetail() {
 
   const unit = product.units.find((u) => u.id === selectedUnitId) ?? product.units[0] ?? null;
   const outOfStock = unit?.availability === "out_of_stock";
+
+  // Pricing engine (spec §5): when the buyer has the DEFAULT unit selected
+  // AND the product has a current price version, that shelf wins over the
+  // legacy per-unit price. Non-default units keep their unit.priceKes —
+  // the engine is per-product/default-unit only.
+  const isDefaultUnit = unit ? unit.isDefault : false;
+  const shelfPrice =
+    (isDefaultUnit ? product.currentPrice?.shelfRateKes : undefined) ??
+    unit?.priceKes ??
+    0;
 
   // When the buyer switches pack (or lands on a unit with an MOQ > 1),
   // snap the quantity up to the minimum the DB says is orderable.
@@ -238,7 +254,12 @@ function ProductDetail() {
       productName: product.name,
       unitLabel: unit.unitLabel,
       quantity: qty,
-      priceKes: unit.priceKes,
+      priceKes: shelfPrice,
+      // Pricing-engine hints so /cart's stepper honours weight/piece/pack.
+      sellMode: product.sellMode,
+      baseUnit: product.baseUnit,
+      minQty: product.minQty,
+      qtyStep: product.qtyStep,
     });
     toast.success(`Added ${qty} × ${product.name}`, { duration: 1600 });
     navigate({ to: "/cart" });
@@ -427,7 +448,7 @@ function ProductDetail() {
               </p>
             )}
             <p className="mt-4 text-[26px] font-semibold tabular-nums text-ink lg:text-[32px]">
-              {formatKes(unit.priceKes)}
+              {formatKes(shelfPrice)}
             </p>
 
             <p className={`mt-5 text-[15px] leading-relaxed text-ink-muted ${expanded ? "" : "line-clamp-3 lg:line-clamp-none"}`}>
@@ -487,7 +508,7 @@ function ProductDetail() {
                 disabled={outOfStock}
                 className="flex-1 rounded-full bg-ink px-6 py-3.5 text-[14px] font-semibold text-background transition hover:bg-ink/90 disabled:opacity-40"
               >
-                {outOfStock ? "Currently unavailable" : `Add to cart · ${formatKes(unit.priceKes * qty)}`}
+                {outOfStock ? "Currently unavailable" : `Add to cart · ${formatKes(shelfPrice * qty)}`}
               </button>
             </div>
           </div>
@@ -514,8 +535,11 @@ function ProductDetail() {
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
           <QuantityStepper
             value={qty}
-            onChange={(v) => setQty(Math.max(unit.moq ?? 1, v))}
-            min={unit.moq ?? 1}
+            onChange={(v) => setQty(Math.max(unit.moq ?? product.minQty ?? 1, v))}
+            min={unit.moq ?? product.minQty ?? 1}
+            step={product.qtyStep ?? 1}
+            sellMode={product.sellMode}
+            baseUnit={product.baseUnit}
           />
           <button
             type="button"
@@ -523,7 +547,7 @@ function ProductDetail() {
             disabled={outOfStock}
             className="flex-1 rounded-full bg-ink px-4 py-3 text-[14px] font-semibold text-background shadow-sm transition-colors disabled:opacity-40"
           >
-            {outOfStock ? "Unavailable" : `Add · ${formatKes(unit.priceKes * qty)}`}
+            {outOfStock ? "Unavailable" : `Add · ${formatKes(shelfPrice * qty)}`}
           </button>
         </div>
       </div>

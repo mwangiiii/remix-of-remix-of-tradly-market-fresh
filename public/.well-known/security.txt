@@ -2,7 +2,7 @@
 # If you believe you've found a security vulnerability, please report it
 # privately at the address below before any public disclosure.
 
-Contact: mailto:security@tradly.co.ke
+Contact: mailto:info@tradly.co.ke
 Expires: 2027-07-16T00:00:00.000Z
 Preferred-Languages: en
 Canonical: https://market.tradly.co.ke/.well-known/security.txt

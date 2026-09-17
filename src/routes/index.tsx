@@ -19,6 +19,7 @@ import {
   FAQ_ITEMS,
   DELIVERY_ZONES,
 } from "../marketplace/lib/seo";
+import { usePersonaCopy } from "../marketplace/lib/persona";
 import { MapPin, HelpCircle } from "lucide-react";
 
 const HOME_DESCRIPTION =
@@ -58,6 +59,11 @@ const HOME_FAQ_TEASER_QS = [
 ];
 
 function Home() {
+  // Anon browsers see the SEO-optimised anon copy (unchanged, so Google
+  // keeps ranking on the same corpus). Signed-in users get persona-aware
+  // hero + "Where we deliver" intro. Swap is client-side only — SSR
+  // always renders anon.
+  const copy = usePersonaCopy();
   const { data: products = [], isLoading: productsLoading } = useQuery({
     queryKey: ["products"],
     queryFn: getAllProducts,
@@ -100,16 +106,13 @@ function Home() {
         {/* Editorial hero */}
         <section className="hidden pt-10 pb-6 lg:block">
           <p className="text-[12px] font-medium uppercase tracking-[0.18em] text-ink-muted">
-            Tradly Market · Nairobi
+            {copy.homeHero.eyebrow}
           </p>
           <h1 className="mt-3 max-w-3xl text-[52px] font-semibold leading-[1.05] tracking-tight text-ink">
-            Fresh produce.
-            <br />
-            <span className="text-ink-muted">Single source. Single invoice.</span>
+            {copy.homeHero.headline}
           </h1>
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-ink-muted">
-            Vegetables, fruit, rice and pantry staples, curated by Tradly and delivered
-            same day across Kenyan kitchens.
+            {copy.homeHero.subhead}
           </p>
         </section>
 
@@ -246,9 +249,7 @@ function Home() {
             </span>
           </div>
           <p className="mb-4 text-[13px] leading-relaxed text-ink-muted lg:text-[14px]">
-            Tradly Market covers Nairobi, Kiambu, Machakos, Kirinyaga, Murang'a, Nyeri,
-            Nyandarua, Embu, Nakuru, Laikipia and Uasin Gishu counties — restaurants, hotels,
-            schools, hospitals and institutions across the zones below.
+            {copy.whereWeDeliverIntro}
           </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 lg:gap-4">
             {DELIVERY_ZONES.map((z) => (

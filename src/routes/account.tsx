@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import React, { useEffect } from "react";
 import {
   MapPin, Receipt, Bell, LogOut, Building2, Mail, Phone,
-  ChevronRight, Rocket, ArrowUpRight,
+  ChevronRight, Rocket, ArrowUpRight, Wallet, RefreshCcw, ShieldCheck,
 } from "lucide-react";
 import { AppShell } from "../marketplace/components/AppShell";
 import { TrustHeader } from "../marketplace/components/TrustHeader";
 import { getMyBusiness, getOrders } from "../marketplace/api/marketplaceApi";
 import { useAuth } from "@/hooks/use-auth";
+import { usePersonaCopy } from "../marketplace/lib/persona";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/account")({
@@ -23,7 +24,8 @@ export const Route = createFileRoute("/account")({
 
 function Account() {
   const navigate = useNavigate();
-  const { buyer, isAuthenticated, isInitializing, logout } = useAuth();
+  const { buyer, isAuthenticated, isInitializing, isPlatformSuperAdmin, logout } = useAuth();
+  const copy = usePersonaCopy();
 
   // Anonymous users get pushed to /login with `?next=/account` so they
   // return here after signing in. Runs after the silent-refresh settles
@@ -99,13 +101,41 @@ function Account() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                Signed in as
+                {copy.account.signedInLabel}
               </p>
               <h2 className="mt-0.5 truncate text-[18px] font-semibold text-ink">{displayName}</h2>
               <p className="mt-0.5 truncate text-[12.5px] text-ink-muted">{buyer?.email}</p>
             </div>
           </div>
         </section>
+
+        {/* Platform admin entry point. Rendered ONLY for platform_super_admin
+            JWTs — customers never see it. Sits above the upgrade CTA so newly-
+            provisioned super admins spot the workspace on first login without
+            being told to type /admin in the URL bar. */}
+        {isPlatformSuperAdmin && (
+          <section className="mt-5 rounded-2xl border border-trust-deep/30 bg-trust-deep/[0.04] p-5">
+            <div className="flex items-start gap-3">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-trust-deep/15 text-trust-deep">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-ink">Tradly platform admin</p>
+                <p className="mt-1 text-[12.5px] leading-relaxed text-ink-muted">
+                  Catalog, categories, deliveries, rider pay, credit, refunds,
+                  settlements, zones — everything the platform team manages.
+                </p>
+                <Link
+                  to="/admin"
+                  className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-trust-deep hover:underline"
+                >
+                  Open admin dashboard
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Upgrade CTA (individual buyers only) — deep-links into tradly-flow's
             §9 graduation wizard. business.id doesn't change during upgrade so
@@ -130,13 +160,38 @@ function Account() {
             icon={Bell}
             label="Notifications"
           />
+          {/* Individuals get the household address book; companies use branches. */}
+          {business?.businessType === "individual" && (
+            <QuickTile
+              to="/account/addresses"
+              icon={MapPin}
+              label="Addresses"
+              hint="Manage delivery locations"
+            />
+          )}
+          {business?.businessType === "individual" && (
+            <QuickTile
+              to="/account/credit"
+              icon={Wallet}
+              label="Store credit & refunds"
+              hint="Gift credit + refund status"
+            />
+          )}
+          {business?.businessType === "individual" && (
+            <QuickTile
+              to="/account/recurring"
+              icon={RefreshCcw}
+              label="Recurring baskets"
+              hint="Weekly / fortnightly reorders"
+            />
+          )}
         </section>
 
         {/* Business details */}
         <section className="mt-5 rounded-2xl border border-divider bg-surface p-5">
           <div className="mb-3 flex items-center gap-2 text-ink-muted">
             <Building2 className="h-4 w-4" />
-            <p className="text-[12px] font-semibold uppercase tracking-wide">Business</p>
+            <p className="text-[12px] font-semibold uppercase tracking-wide">{copy.account.businessSectionTitle}</p>
           </div>
 
           {bizLoading ? (
@@ -278,7 +333,7 @@ function QuickTile({
   label,
   hint,
 }: {
-  to: "/orders" | "/notifications";
+  to: "/orders" | "/notifications" | "/account/addresses" | "/account/credit" | "/account/recurring";
   icon: typeof Receipt;
   label: string;
   hint?: string;

@@ -1,8 +1,12 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getCategories } from "../api/marketplaceApi";
 
 export function CategoryPillRow({ activeSlug }: { activeSlug?: string }) {
+  // "All products" pill highlights only on /products, not on / (home). Home
+  // is a curated landing (hero + featured); /products is the full grid.
+  const location = useLocation();
+  const onAllProductsPage = location.pathname === "/products";
   // Live from Supabase — same query key as everywhere else so the browse
   // pages, search, and category page share one cached list.
   const { data: categories = [], isLoading } = useQuery({
@@ -31,6 +35,18 @@ export function CategoryPillRow({ activeSlug }: { activeSlug?: string }) {
   return (
     <nav className="hide-scrollbar -mx-4 overflow-x-auto px-4" aria-label="Categories">
       <ul className="flex gap-2 pb-1">
+        <li className="shrink-0">
+          <Link
+            to="/products"
+            className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-4 py-2 text-[13px] font-medium transition-colors ${
+              onAllProductsPage
+                ? "bg-farm text-farm-foreground"
+                : "bg-surface text-ink border border-divider hover:border-farm/40"
+            }`}
+          >
+            All products
+          </Link>
+        </li>
         {categories.map((c) => {
           const active = c.slug === activeSlug;
           return (

@@ -19,6 +19,7 @@ import {
   type AuthContextType,
   type AuthError,
   type Buyer,
+  type BusinessType,
   type SignupInput,
 } from "./AuthContext";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -99,6 +100,24 @@ function roleFromClaims(claims: Record<string, unknown>): string {
   return (claims.app_role ?? claims.role ?? claims.user_role ?? "authenticated") as string;
 }
 
+function businessTypeFromClaims(
+  claims: Record<string, unknown>,
+  fallback?: Partial<Buyer>,
+): BusinessType {
+  // The custom_access_token_hook (tradly-flow migration
+  // 20260910120000_access_token_hook_business_type_claim.sql) emits
+  // `business_type` for every JWT it mints. Sessions created before the hook
+  // update ships will not carry the claim until their next silent refresh
+  // (≤5min from expiry) — in that window we fall back to whatever the last
+  // known value was, then to "company" (the pre-household-commerce default,
+  // matching the hook's own COALESCE fallback).
+  const raw = claims.business_type;
+  if (raw === "individual" || raw === "company" || raw === "supplier_vendor") {
+    return raw;
+  }
+  return fallback?.businessType ?? "company";
+}
+
 function buyerFromClaims(claims: Record<string, unknown>, fallback?: Partial<Buyer>): Buyer {
   return {
     id: (claims.sub as string) ?? fallback?.id ?? "",
@@ -106,6 +125,7 @@ function buyerFromClaims(claims: Record<string, unknown>, fallback?: Partial<Buy
     fullName: (claims.name as string) ?? fallback?.fullName,
     businessId: (claims.business_id as string) ?? fallback?.businessId ?? null,
     role: roleFromClaims(claims),
+    businessType: businessTypeFromClaims(claims, fallback),
   };
 }
 
