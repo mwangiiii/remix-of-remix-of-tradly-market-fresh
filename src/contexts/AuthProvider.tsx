@@ -30,6 +30,11 @@ import { trackEvent } from "@/lib/analytics";
 const JUST_LOGGED_OUT = "__tradly_market_just_logged_out";
 const LOGOUT_REASON = "__tradly_market_logout_reason";
 
+// Shared BroadcastChannel name (audit finding H2). All three apps use the
+// same name so a logout on any one propagates to every open tab, regardless
+// of which app it came from.
+const AUTH_CHANNEL = "tradly_auth";
+
 // Magic-link (Sub 27) refresh token storage (Sub 29 long-lived session,
 // Sub 31 upgraded to httpOnly cookie).
 //
@@ -551,6 +556,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (reason !== "user_requested") {
             sessionStorage.setItem(LOGOUT_REASON, reason);
           }
+          // Audit finding H2: broadcast to all other open tabs so they
+          // also clear their session state immediately rather than
+          // silently staying signed in until next focus/refresh.
+          try {
+            const ch = new BroadcastChannel(AUTH_CHANNEL);
+            ch.postMessage({ type: "logout", reason });
+            ch.close();
+          } catch { /* BroadcastChannel not available (SSR / old browser) */ }
           setTimeout(() => {
             window.location.href = "/";
           }, 100);
@@ -629,6 +642,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [isAuthenticated, expiresAt, refreshSilently]);
+
+  // Audit finding H2 — receive cross-tab logout signal. When any tab (or
+  // any other app sharing the same BroadcastChannel name) posts a
+  // { type: "logout" } message, wipe local session state immediately
+  // so this tab doesn't stay signed in after another tab signed out.
+  // SSR / browsers without BroadcastChannel get the previous per-tab
+  // behaviour (no change from before).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel(AUTH_CHANNEL);
+      ch.onmessage = (ev: MessageEvent) => {
+        if (ev.data?.type === "logout") {
+          clearAuthState();
+          queryClient.clear();
+          sessionStorage.setItem(JUST_LOGGED_OUT, "true");
+          // Soft navigate to home — keeps the page usable as anonymous
+          // rather than hardcoding a redirect, which could be confusing
+          // if the user was deep in a flow.
+          window.location.href = "/";
+        }
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => { try { ch?.close(); } catch { /* ignore */ } };
+  }, [clearAuthState, queryClient]);
 
   const value: AuthContextType = {
     isAuthenticated,
