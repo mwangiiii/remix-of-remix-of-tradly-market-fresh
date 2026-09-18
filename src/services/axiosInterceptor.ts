@@ -62,7 +62,14 @@ export function normaliseError(error: unknown): NormalisedError {
 
 let proactiveRefreshInFlight = false;
 
-async function proactiveRefresh(functionsBase: string): Promise<void> {
+// Audit finding H1: use the same-origin proxy for auth-refresh so
+// SameSite=Lax cookies are always sent (cross-origin supabase.co calls
+// had the cookie silently dropped by Chrome 3rd-party phase-out / Safari ITP).
+// functionsBase is kept for the response-interceptor's 401 replay (still
+// needed for non-auth Edge Function calls).
+const PROXY_REFRESH_URL = "/api/auth/refresh";
+
+async function proactiveRefresh(): Promise<void> {
   const authStore = useAuthStore.getState();
   if (proactiveRefreshInFlight || authStore.isRefreshing) return;
 
@@ -70,11 +77,12 @@ async function proactiveRefresh(functionsBase: string): Promise<void> {
   authStore.setRefreshing(true);
 
   try {
-    const { data } = await axios.post<{ access_token: string; expires_in: number }>(
-      `${functionsBase}/auth-refresh`,
-      {},
-      { withCredentials: true, timeout: 15_000 },
-    );
+    const res = await fetch(PROXY_REFRESH_URL, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    if (!res.ok) return;
+    const data = await res.json() as { access_token: string; expires_in: number };
     useAuthStore.getState().setToken(data.access_token, data.expires_in);
   } catch {
     // Swallow — anonymous or expiring, the 401 response interceptor is the safety net.
@@ -95,7 +103,10 @@ export function attachInterceptors(instance: AxiosInstance, functionsBase: strin
       }
 
       const isAuthEndpoint =
-        config.url?.includes("/auth-refresh") || config.url?.includes("/auth-login");
+        config.url?.includes("/auth-refresh") ||
+        config.url?.includes("/auth-login") ||
+        config.url?.includes("/api/auth/refresh") ||
+        config.url?.includes("/api/auth/login");
 
       if (
         authStore.isExpiringSoon(100) &&
@@ -103,7 +114,7 @@ export function attachInterceptors(instance: AxiosInstance, functionsBase: strin
         !proactiveRefreshInFlight &&
         !isAuthEndpoint
       ) {
-        proactiveRefresh(functionsBase).catch(() => {});
+        proactiveRefresh().catch(() => {});
       }
 
       return config;
@@ -128,7 +139,7 @@ export function attachInterceptors(instance: AxiosInstance, functionsBase: strin
 
       // 401 from the refresh endpoint itself → unrecoverable when we had a session.
       // If the caller was anonymous (no token in memory), silently stay anonymous.
-      if (originalRequest.url?.includes("/auth-refresh")) {
+      if (originalRequest.url?.includes("/auth-refresh") || originalRequest.url?.includes("/api/auth/refresh")) {
         const hadToken = !!useAuthStore.getState().accessToken;
         if (!hadToken) return Promise.reject(normaliseError(error));
         if (code === "AUTH_006") forceLogoutExpired("Refresh endpoint → AUTH_006");
@@ -138,7 +149,7 @@ export function attachInterceptors(instance: AxiosInstance, functionsBase: strin
       }
 
       // 401 from /auth-login → let the login page surface it
-      if (originalRequest.url?.includes("/auth-login")) {
+      if (originalRequest.url?.includes("/auth-login") || originalRequest.url?.includes("/api/auth/login")) {
         return Promise.reject(normaliseError(error));
       }
 
@@ -161,13 +172,15 @@ export function attachInterceptors(instance: AxiosInstance, functionsBase: strin
       originalRequest._retried = true;
 
       try {
-        const { data } = await axios.post<{ access_token: string; expires_in: number }>(
-          `${functionsBase}/auth-refresh`,
-          {},
-          { withCredentials: true, timeout: 15_000 },
-        );
-
-        const { access_token, expires_in } = data;
+        const refreshRes = await fetch(PROXY_REFRESH_URL, {
+          method: "POST",
+          credentials: "same-origin",
+        });
+        if (!refreshRes.ok) throw new Error(`refresh ${refreshRes.status}`);
+        const { access_token, expires_in } = await refreshRes.json() as {
+          access_token: string;
+          expires_in: number;
+        };
         authStore.setToken(access_token, expires_in);
         drainQueue(access_token);
 

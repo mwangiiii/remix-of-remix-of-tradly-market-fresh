@@ -229,13 +229,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Path 2: email/password refresh via /auth-refresh cookie
-      if (!api.defaults.baseURL) {
+      // Path 2: email/password refresh via the same-origin proxy.
+      // Audit finding H1: previously called /auth-refresh directly on
+      // supabase.co (cross-origin). Chrome 3rd-party cookie phase-out and
+      // Safari ITP silently drop the tradly_refresh cookie on cross-site
+      // requests even with SameSite=None;Secure, so the cookie never
+      // arrived at the Edge Function → 401 "no session cookie" every time.
+      // /api/auth/refresh is same-origin on market.tradly.co.ke and
+      // re-issues the cookie with SameSite=Lax, which is always sent.
+      const proxyRes = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!proxyRes.ok) {
         clearAuthState();
         return;
       }
-      const response = await api.post("/auth-refresh", {});
-      const { access_token, expires_in } = response.data as {
+      const { access_token, expires_in } = (await proxyRes.json()) as {
         access_token: string;
         expires_in: number;
       };
@@ -608,10 +618,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBuyer((prev) => (prev ? { ...prev, ...buyerFromClaims(claims, prev) } : buyerFromClaims(claims)));
       return;
     }
-    if (!api.defaults.baseURL) return;
     try {
-      const response = await api.post("/auth-refresh", {});
-      const { access_token, expires_in } = response.data as {
+      // Audit finding H1: same-origin proxy (see silentRefresh path 2).
+      const proxyRes = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!proxyRes.ok) return;
+      const { access_token, expires_in } = (await proxyRes.json()) as {
         access_token: string;
         expires_in: number;
       };
