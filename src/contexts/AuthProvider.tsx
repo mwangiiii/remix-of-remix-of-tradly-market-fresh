@@ -25,9 +25,15 @@ import {
 import { useAuthStore } from "@/store/useAuthStore";
 import { api } from "@/services/api";
 import { getSupabase } from "@/lib/supabase";
+import { trackEvent } from "@/lib/analytics";
 
 const JUST_LOGGED_OUT = "__tradly_market_just_logged_out";
 const LOGOUT_REASON = "__tradly_market_logout_reason";
+
+// Shared BroadcastChannel name (audit finding H2). All three apps use the
+// same name so a logout on any one propagates to every open tab, regardless
+// of which app it came from.
+const AUTH_CHANNEL = "tradly_auth";
 
 // Magic-link (Sub 27) refresh token storage (Sub 29 long-lived session,
 // Sub 31 upgraded to httpOnly cookie).
@@ -48,14 +54,38 @@ if (typeof window !== "undefined") {
 }
 
 async function storeMagicRefresh(refreshToken: string): Promise<void> {
+  // Audit finding H4: previously this swallowed every failure. A non-2xx
+  // (e.g. 400 from the store endpoint's length validation) meant the
+  // httpOnly cookie was never written, so the session died on the next
+  // reload — with zero signal to the caller. We now:
+  //   - Distinguish network errors (fetch throws) from HTTP errors (res.ok false)
+  //   - console.warn with status + body so it shows up in remote-debug traces
+  //   - trackEvent("auth_session_store_failed") so ops has metrics
   try {
-    await fetch("/api/session/store", {
+    const res = await fetch("/api/session/store", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
       credentials: "same-origin",
     });
-  } catch { /* network hiccup — session works this tab, dies on reload */ }
+    if (!res.ok) {
+      const body = await res.text().catch(() => "<no body>");
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[auth] /api/session/store returned ${res.status}: ${body}. ` +
+        `The magic-link session will die on next reload.`,
+      );
+      trackEvent("auth_session_store_failed", { status: res.status });
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[auth] /api/session/store threw (network error). " +
+      "The magic-link session works this tab but dies on reload.",
+      err,
+    );
+    trackEvent("auth_session_store_failed", { status: 0 });
+  }
 }
 
 type SessionRefreshResult = { access_token: string; expires_in: number } | null;
@@ -199,13 +229,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Path 2: email/password refresh via /auth-refresh cookie
-      if (!api.defaults.baseURL) {
+      // Path 2: email/password refresh via the same-origin proxy.
+      // Audit finding H1: previously called /auth-refresh directly on
+      // supabase.co (cross-origin). Chrome 3rd-party cookie phase-out and
+      // Safari ITP silently drop the tradly_refresh cookie on cross-site
+      // requests even with SameSite=None;Secure, so the cookie never
+      // arrived at the Edge Function → 401 "no session cookie" every time.
+      // /api/auth/refresh is same-origin on market.tradly.co.ke and
+      // re-issues the cookie with SameSite=Lax, which is always sent.
+      const proxyRes = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!proxyRes.ok) {
         clearAuthState();
         return;
       }
-      const response = await api.post("/auth-refresh", {});
-      const { access_token, expires_in } = response.data as {
+      const { access_token, expires_in } = (await proxyRes.json()) as {
         access_token: string;
         expires_in: number;
       };
@@ -505,12 +545,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (reason = "user_requested") => {
       try {
         setIsLoading(true);
-        // Also revoke the Supabase-side session for magic-link users so the
-        // stored refresh_token becomes unusable immediately. Clearing the
-        // cookie in parallel — either succeeding is enough.
+        // Belt-and-braces server-side revoke (audit finding C2). Three
+        // parallel best-effort calls:
+        //  - clearMagicRefreshCookie: expires market's own tradly_market_refresh
+        //  - getSupabase().auth.signOut: kills the in-memory Supabase session
+        //  - api.post("/auth-logout"): revokes the Supabase refresh_token
+        //    server-side via /functions/v1/auth-logout AND expires the
+        //    tradly_refresh cookie (set by /auth-login for password users).
+        //    Without this call the server-side refresh_token remained valid
+        //    for its 30-day lifetime after "logout".
         await Promise.allSettled([
           clearMagicRefreshCookie(),
           getSupabase().auth.signOut(),
+          api.post("/auth-logout", {}).catch(() => { /* idempotent by design */ }),
         ]);
         clearAuthState();
         queryClient.clear();
@@ -519,6 +566,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (reason !== "user_requested") {
             sessionStorage.setItem(LOGOUT_REASON, reason);
           }
+          // Audit finding H2: broadcast to all other open tabs so they
+          // also clear their session state immediately rather than
+          // silently staying signed in until next focus/refresh.
+          try {
+            const ch = new BroadcastChannel(AUTH_CHANNEL);
+            ch.postMessage({ type: "logout", reason });
+            ch.close();
+          } catch { /* BroadcastChannel not available (SSR / old browser) */ }
           setTimeout(() => {
             window.location.href = "/";
           }, 100);
@@ -563,10 +618,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBuyer((prev) => (prev ? { ...prev, ...buyerFromClaims(claims, prev) } : buyerFromClaims(claims)));
       return;
     }
-    if (!api.defaults.baseURL) return;
     try {
-      const response = await api.post("/auth-refresh", {});
-      const { access_token, expires_in } = response.data as {
+      // Audit finding H1: same-origin proxy (see silentRefresh path 2).
+      const proxyRes = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!proxyRes.ok) return;
+      const { access_token, expires_in } = (await proxyRes.json()) as {
         access_token: string;
         expires_in: number;
       };
@@ -597,6 +656,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [isAuthenticated, expiresAt, refreshSilently]);
+
+  // Audit finding H2 — receive cross-tab logout signal. When any tab (or
+  // any other app sharing the same BroadcastChannel name) posts a
+  // { type: "logout" } message, wipe local session state immediately
+  // so this tab doesn't stay signed in after another tab signed out.
+  // SSR / browsers without BroadcastChannel get the previous per-tab
+  // behaviour (no change from before).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let ch: BroadcastChannel | null = null;
+    try {
+      ch = new BroadcastChannel(AUTH_CHANNEL);
+      ch.onmessage = (ev: MessageEvent) => {
+        if (ev.data?.type === "logout") {
+          clearAuthState();
+          queryClient.clear();
+          sessionStorage.setItem(JUST_LOGGED_OUT, "true");
+          // Soft navigate to home — keeps the page usable as anonymous
+          // rather than hardcoding a redirect, which could be confusing
+          // if the user was deep in a flow.
+          window.location.href = "/";
+        }
+      };
+    } catch { /* BroadcastChannel not available */ }
+    return () => { try { ch?.close(); } catch { /* ignore */ } };
+  }, [clearAuthState, queryClient]);
 
   const value: AuthContextType = {
     isAuthenticated,

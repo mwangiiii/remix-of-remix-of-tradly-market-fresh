@@ -51,6 +51,8 @@ import { Route as ApiSessionStoreRouteImport } from './routes/api.session.store'
 import { Route as ApiSessionRefreshRouteImport } from './routes/api.session.refresh'
 import { Route as ApiSessionHandoffRouteImport } from './routes/api.session.handoff'
 import { Route as ApiSessionClearRouteImport } from './routes/api.session.clear'
+import { Route as ApiAuthRefreshRouteImport } from './routes/api.auth.refresh'
+import { Route as ApiAuthLoginRouteImport } from './routes/api.auth.login'
 import { Route as AdminProductIdPricesRouteImport } from './routes/admin.product.$id.prices'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -263,6 +265,16 @@ const ApiSessionClearRoute = ApiSessionClearRouteImport.update({
   path: '/api/session/clear',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthRefreshRoute = ApiAuthRefreshRouteImport.update({
+  id: '/api/auth/refresh',
+  path: '/api/auth/refresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLoginRoute = ApiAuthLoginRouteImport.update({
+  id: '/api/auth/login',
+  path: '/api/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminProductIdPricesRoute = AdminProductIdPricesRouteImport.update({
   id: '/admin/product/$id/prices',
   path: '/admin/product/$id/prices',
@@ -306,6 +318,8 @@ export interface FileRoutesByFullPath {
   '/rider/$driverId': typeof RiderDriverIdRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/refresh': typeof ApiAuthRefreshRoute
   '/api/session/clear': typeof ApiSessionClearRoute
   '/api/session/handoff': typeof ApiSessionHandoffRoute
   '/api/session/refresh': typeof ApiSessionRefreshRoute
@@ -351,6 +365,8 @@ export interface FileRoutesByTo {
   '/rider/$driverId': typeof RiderDriverIdRoute
   '/admin': typeof AdminIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/refresh': typeof ApiAuthRefreshRoute
   '/api/session/clear': typeof ApiSessionClearRoute
   '/api/session/handoff': typeof ApiSessionHandoffRoute
   '/api/session/refresh': typeof ApiSessionRefreshRoute
@@ -397,6 +413,8 @@ export interface FileRoutesById {
   '/rider/$driverId': typeof RiderDriverIdRoute
   '/admin/': typeof AdminIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/auth/login': typeof ApiAuthLoginRoute
+  '/api/auth/refresh': typeof ApiAuthRefreshRoute
   '/api/session/clear': typeof ApiSessionClearRoute
   '/api/session/handoff': typeof ApiSessionHandoffRoute
   '/api/session/refresh': typeof ApiSessionRefreshRoute
@@ -444,6 +462,8 @@ export interface FileRouteTypes {
     | '/rider/$driverId'
     | '/admin/'
     | '/lists/'
+    | '/api/auth/login'
+    | '/api/auth/refresh'
     | '/api/session/clear'
     | '/api/session/handoff'
     | '/api/session/refresh'
@@ -489,6 +509,8 @@ export interface FileRouteTypes {
     | '/rider/$driverId'
     | '/admin'
     | '/lists'
+    | '/api/auth/login'
+    | '/api/auth/refresh'
     | '/api/session/clear'
     | '/api/session/handoff'
     | '/api/session/refresh'
@@ -534,6 +556,8 @@ export interface FileRouteTypes {
     | '/rider/$driverId'
     | '/admin/'
     | '/lists/'
+    | '/api/auth/login'
+    | '/api/auth/refresh'
     | '/api/session/clear'
     | '/api/session/handoff'
     | '/api/session/refresh'
@@ -577,6 +601,8 @@ export interface RootRouteChildren {
   RiderDriverIdRoute: typeof RiderDriverIdRoute
   AdminIndexRoute: typeof AdminIndexRoute
   ListsIndexRoute: typeof ListsIndexRoute
+  ApiAuthLoginRoute: typeof ApiAuthLoginRoute
+  ApiAuthRefreshRoute: typeof ApiAuthRefreshRoute
   ApiSessionClearRoute: typeof ApiSessionClearRoute
   ApiSessionHandoffRoute: typeof ApiSessionHandoffRoute
   ApiSessionRefreshRoute: typeof ApiSessionRefreshRoute
@@ -882,6 +908,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionClearRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/refresh': {
+      id: '/api/auth/refresh'
+      path: '/api/auth/refresh'
+      fullPath: '/api/auth/refresh'
+      preLoaderRoute: typeof ApiAuthRefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/login': {
+      id: '/api/auth/login'
+      path: '/api/auth/login'
+      fullPath: '/api/auth/login'
+      preLoaderRoute: typeof ApiAuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/product/$id/prices': {
       id: '/admin/product/$id/prices'
       path: '/admin/product/$id/prices'
@@ -941,6 +981,8 @@ const rootRouteChildren: RootRouteChildren = {
   RiderDriverIdRoute: RiderDriverIdRoute,
   AdminIndexRoute: AdminIndexRoute,
   ListsIndexRoute: ListsIndexRoute,
+  ApiAuthLoginRoute: ApiAuthLoginRoute,
+  ApiAuthRefreshRoute: ApiAuthRefreshRoute,
   ApiSessionClearRoute: ApiSessionClearRoute,
   ApiSessionHandoffRoute: ApiSessionHandoffRoute,
   ApiSessionRefreshRoute: ApiSessionRefreshRoute,

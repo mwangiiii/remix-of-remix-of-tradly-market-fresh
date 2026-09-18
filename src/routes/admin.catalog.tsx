@@ -279,23 +279,98 @@ function CatalogAdmin() {
       </header>
 
       <main className="mx-auto max-w-7xl px-4 pb-24 pt-6 md:px-6">
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Search + add — search full-width on mobile, side-by-side on md+ */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <input
             value={query} onChange={(e) => setQuery(e.target.value)}
             placeholder="Search products…"
-            className="min-w-56 flex-1 rounded-full border border-divider bg-surface px-4 py-2.5 text-[13px] focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20"
+            className="w-full rounded-full border border-divider bg-surface px-4 py-2.5 text-[13px] focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20 sm:min-w-56 sm:flex-1"
           />
           <button
             onClick={openNew}
             disabled={categories.length === 0}
-            className="inline-flex items-center gap-1.5 rounded-full bg-ink px-4 py-2.5 text-[13px] font-semibold text-background hover:bg-ink/90 disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-ink px-4 py-2.5 text-[13px] font-semibold text-background hover:bg-ink/90 disabled:opacity-50 sm:w-auto"
             title={categories.length === 0 ? "Create a category first" : undefined}
           >
             <Plus className="h-4 w-4" /> New product
           </button>
         </div>
 
-        <section className="mt-5 overflow-hidden rounded-2xl border border-divider bg-surface">
+        {/* ── Mobile card list (hidden on md+) ─────────────────────────── */}
+        <section className="mt-5 space-y-2 md:hidden">
+          {productsLoading && (
+            <p className="py-14 text-center text-[13px] text-ink-muted">Loading…</p>
+          )}
+          {!productsLoading && filtered.length === 0 && (
+            <p className="py-14 text-center text-[13px] text-ink-muted">
+              {products.length === 0 ? "No products yet — create the first one." : "No products match."}
+            </p>
+          )}
+          {filtered.map((p) => {
+            const def = p.units.find((u) => u.isDefault) ?? p.units[0];
+            const shelf = p.currentPrice?.shelfRateKes ?? def?.priceKes ?? null;
+            const categoryName = categories.find((c) => c.id === p.categoryId)?.name ?? "—";
+            return (
+              <div key={p.id} className="rounded-2xl border border-divider bg-surface p-4">
+                {/* Row 1: thumbnail + name + price */}
+                <div className="flex items-start gap-3">
+                  <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-muted">
+                    {p.thumbnailUrl && <img src={p.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-semibold text-ink">{p.name}</p>
+                    <p className="text-[11px] text-ink-muted">{categoryName} · {SELL_MODE_LABEL[p.sellMode]}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[14px] font-semibold tabular-nums text-ink">
+                      {shelf != null ? formatKes(shelf) : "—"}
+                    </p>
+                    {/* Status badge */}
+                    {!p.currentPrice ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold text-destructive">
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        Unpriced
+                      </span>
+                    ) : (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                        p.published ? "bg-farm/12 text-farm" : "bg-muted text-ink-muted"
+                      }`}>
+                        <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {p.published ? "Published" : "Draft"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {/* Row 2: action buttons */}
+                <div className="mt-3 flex items-center gap-2 border-t border-divider pt-3">
+                  <Link
+                    to="/admin/product/$id/prices"
+                    params={{ id: p.id }}
+                    className="flex-1 rounded-full border border-divider bg-background py-2 text-center text-[12px] font-semibold text-ink-muted"
+                  >
+                    History
+                  </Link>
+                  <button
+                    onClick={() => setEditing({ ...p, units: [...p.units], galleryUrls: [...p.galleryUrls] })}
+                    className="flex-1 rounded-full border border-divider bg-background py-2 text-center text-[12px] font-semibold text-ink"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => { if (confirm(`Delete ${p.name}?`)) deleteProduct.mutate(p.id); }}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+
+        {/* ── Desktop table (hidden below md) ──────────────────────────── */}
+        <section className="mt-5 hidden overflow-hidden rounded-2xl border border-divider bg-surface md:block">
           <table className="w-full text-left text-[13px]">
             <thead className="border-b border-divider bg-background/60 text-[11px] uppercase tracking-wide text-ink-muted">
               <tr>
@@ -337,10 +412,6 @@ function CatalogAdmin() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      {/* Unpriced overrides Published/Draft — an unpriced
-                          product is hidden from the storefront regardless
-                          of published flag (spec §6.3 enforced by the
-                          !inner join in marketplaceApi.getAllProducts). */}
                       {!p.currentPrice ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
                           <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -560,7 +631,7 @@ function ProductEditor({
   return (
     <div className="fixed inset-0 z-50 flex bg-black/50" onClick={onClose}>
       <div
-        className="ml-auto flex h-full w-full max-w-2xl flex-col bg-background shadow-2xl"
+        className="ml-auto flex h-full w-full flex-col bg-background shadow-2xl sm:max-w-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between border-b border-divider bg-surface px-6 py-4">
