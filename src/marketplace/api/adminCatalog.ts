@@ -52,6 +52,17 @@ type UnitRow = {
   display_order: number;
 };
 
+// Admin uses a LEFT join (not !inner) so unpriced products still appear in
+// the list — we just show the "Unpriced · hidden" badge. The storefront uses
+// !inner and drops them entirely. That's the intentional difference.
+type AdminPriceVersionRow = {
+  id: string;
+  cost_rate_kes: number | string;
+  shelf_rate_kes: number | string;
+  effective_markup_pct: number | string;
+  rounding_rule: MarketplaceRoundingRule;
+};
+
 type ProductRow = {
   id: string;
   category_id: string;
@@ -64,10 +75,6 @@ type ProductRow = {
   keywords: string[] | null;
   is_featured: boolean;
   published: boolean;
-  // Pricing engine columns (spec §5). Admin sees products regardless of
-  // whether they have a current price version yet (Draft state), so this
-  // module does NOT inner-join marketplace_price_versions like the
-  // storefront does — currentPrice will be null for unpriced products.
   sell_mode: SellMode;
   base_unit: string;
   min_qty: number | string;
@@ -76,6 +83,8 @@ type ProductRow = {
   pack_contents_label: string | null;
   tax_treatment: MarketplaceTaxTreatment | null;
   marketplace_product_units: UnitRow[] | null;
+  // LEFT-joined current price version (null when unpriced).
+  marketplace_price_versions: AdminPriceVersionRow[] | null;
 };
 
 type ScheduledPriceRow = {
@@ -162,10 +171,6 @@ function mapProduct(r: ProductRow): AdminProduct {
     isFeatured: r.is_featured,
     keywords: r.keywords ?? undefined,
     published: r.published,
-    // Pricing engine (spec §5). Admin doesn't join price_versions here —
-    // pricing history has its own admin surface (B-admin form + versions
-    // list). currentPrice stays null; admin UI reads sellMode/baseUnit
-    // directly from these product columns.
     sellMode: r.sell_mode,
     baseUnit: r.base_unit,
     minQty: num(r.min_qty),
@@ -173,7 +178,19 @@ function mapProduct(r: ProductRow): AdminProduct {
     avgUnitWeightKg: r.avg_unit_weight_kg == null ? null : num(r.avg_unit_weight_kg),
     packContentsLabel: r.pack_contents_label,
     taxTreatment: r.tax_treatment,
-    currentPrice: null,
+    // LEFT-joined current price version. Null = unpriced (shows the
+    // "Unpriced · hidden" badge). Non-null = has a live price version.
+    currentPrice: (() => {
+      const pv = (r.marketplace_price_versions ?? [])[0];
+      if (!pv) return null;
+      return {
+        priceVersionId: pv.id,
+        costRateKes: num(pv.cost_rate_kes),
+        shelfRateKes: num(pv.shelf_rate_kes),
+        effectiveMarkupPct: num(pv.effective_markup_pct),
+        roundingRule: pv.rounding_rule,
+      };
+    })(),
   };
 }
 
@@ -187,6 +204,10 @@ function mapSchedule(r: ScheduledPriceRow): ScheduledPrice {
   };
 }
 
+// LEFT-joins marketplace_price_versions filtered to the current row
+// (effective_to IS NULL). Unlike the storefront (which uses !inner and drops
+// unpriced products), LEFT means unpriced products still appear — we just
+// show the "Unpriced · hidden" badge and force pricing on save.
 const PRODUCT_SELECT = `
   id, category_id, name, slug, description, origin,
   thumbnail_url, gallery_urls, keywords, is_featured, published,
@@ -194,6 +215,9 @@ const PRODUCT_SELECT = `
   avg_unit_weight_kg, pack_contents_label, tax_treatment,
   marketplace_product_units (
     id, product_id, unit_label, unit_qty, is_default, price_kes, availability, display_order
+  ),
+  marketplace_price_versions (
+    id, cost_rate_kes, shelf_rate_kes, effective_markup_pct, rounding_rule
   )
 `;
 
@@ -264,6 +288,11 @@ export async function adminListProducts(): Promise<AdminProduct[]> {
   const { data, error } = await getSupabase()
     .from("marketplace_products")
     .select(PRODUCT_SELECT)
+    // Narrow the embedded price_versions rows to the single current row
+    // (effective_to IS NULL). Same filter the storefront uses — but here it
+    // is on a LEFT join so unpriced products still come back (currentPrice
+    // will be null, storefront uses !inner and drops them entirely).
+    .is("marketplace_price_versions.effective_to", null)
     .order("name", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(mapProduct);
