@@ -100,19 +100,21 @@ function ZonesAdmin() {
   return (
     <div className="min-h-screen bg-background text-ink">
       <header className="sticky top-0 z-30 border-b border-trust-deep/40 bg-trust-deep text-trust-deep-foreground">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-6 py-3.5">
-          <Link to="/admin" className="grid h-9 w-9 place-items-center rounded-full hover:bg-white/10" aria-label="Back">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3.5 md:gap-4 md:px-6">
+          <Link to="/admin" className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-white/10" aria-label="Back">
             <ArrowLeft className="h-5 w-5" />
           </Link>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-70">Tradly Admin</p>
-            <h1 className="text-[15px] font-semibold">Delivery zones</h1>
+            <h1 className="truncate text-[15px] font-semibold">Delivery zones</h1>
           </div>
+          {/* On mobile, the label is icon-only to save space; full label at sm+. */}
           <button
             onClick={openNew}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 text-[13px] font-semibold hover:bg-white/25"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/15 px-3 py-2 text-[13px] font-semibold hover:bg-white/25 sm:px-4"
+            aria-label="New zone"
           >
-            <Plus className="h-4 w-4" /> New zone
+            <Plus className="h-4 w-4" /> <span className="hidden sm:inline">New zone</span>
           </button>
         </div>
       </header>
@@ -124,7 +126,60 @@ function ZonesAdmin() {
           5 minutes; changes surface within that window.
         </p>
 
-        <section className="mt-5 overflow-hidden rounded-2xl border border-divider bg-surface">
+        {/* ── Mobile cards (hidden on md+) ──────────────────────────────── */}
+        <section className="mt-5 space-y-2 md:hidden">
+          {isLoading && <p className="py-14 text-center text-[13px] text-ink-muted">Loading…</p>}
+          {!isLoading && zones.length === 0 && (
+            <p className="py-14 text-center text-[13px] text-ink-muted">No zones yet — add one.</p>
+          )}
+          {zones.map((z) => (
+            <div key={z.id} className="rounded-2xl border border-divider bg-surface p-4">
+              {/* Row 1: name + status */}
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 shrink-0 text-trust" />
+                  <div>
+                    <p className="text-[14px] font-semibold text-ink">{z.name}</p>
+                    <p className="text-[11px] text-ink-muted">{z.county}</p>
+                  </div>
+                </div>
+                <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  z.isActive ? "bg-farm/12 text-farm" : "bg-muted text-ink-muted"
+                }`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {z.isActive ? "Active" : "Inactive"}
+                </span>
+              </div>
+              {/* Row 2: areas */}
+              <p className="mt-2 line-clamp-2 text-[12px] text-ink-muted">{z.areas.join(", ")}</p>
+              {/* Row 3: stats */}
+              <div className="mt-2 flex flex-wrap gap-3 text-[12px] text-ink-muted">
+                <span>Fee: <span className="font-semibold text-ink tabular-nums">{formatKes(z.customerFeeKes)}</span></span>
+                <span>Band: <span className="font-semibold text-ink">{z.defaultDistanceBand}</span></span>
+                <span>Cutoff: <span className="font-semibold text-ink">{z.sameDayCutoffTime.slice(0, 5)}</span></span>
+              </div>
+              {/* Row 4: actions */}
+              <div className="mt-3 flex items-center gap-2 border-t border-divider pt-3">
+                <button
+                  onClick={() => setEditing(fromZone(z))}
+                  className="flex-1 rounded-full border border-divider bg-background py-2 text-center text-[12px] font-semibold text-ink"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => { if (confirm(`Delete ${z.name}?`)) del.mutate(z.id); }}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-ink-muted hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Delete"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+
+        {/* ── Desktop table (hidden below md) ──────────────────────────── */}
+        <section className="mt-5 hidden overflow-hidden rounded-2xl border border-divider bg-surface md:block">
           <table className="w-full text-left text-[13px]">
             <thead className="border-b border-divider bg-background/60 text-[11px] uppercase tracking-wide text-ink-muted">
               <tr>
@@ -228,7 +283,7 @@ function ZoneEditor({
   return (
     <div className="fixed inset-0 z-50 flex bg-black/50" onClick={onClose}>
       <div
-        className="ml-auto flex h-full w-full max-w-lg flex-col bg-background shadow-2xl"
+        className="ml-auto flex h-full w-full flex-col bg-background shadow-2xl sm:max-w-lg"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-center justify-between border-b border-divider bg-surface px-5 py-3.5">
