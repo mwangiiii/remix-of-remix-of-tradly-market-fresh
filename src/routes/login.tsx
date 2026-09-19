@@ -99,6 +99,16 @@ function Login() {
       return;
     }
     try {
+      // Audit finding M4: stash the typed email so the callback route can
+      // cross-check it against the JWT's own user.email after setSession.
+      // Prevents blind token-swap attacks — an attacker who intercepts and
+      // rewrites the magic-link URL to carry a DIFFERENT user's tokens can
+      // no longer silently log the victim in as someone else.
+      // sessionStorage (not localStorage) — scoped to this tab so the check
+      // doesn't false-fail if the user opens the email on a different device.
+      try {
+        sessionStorage.setItem("__tradly_market_magic_pending_email", trimmedEmail.toLowerCase());
+      } catch { /* private mode or storage full — the check just no-ops */ }
       await sendMagicLink(trimmedEmail, trimmedName);
       setMagicSent(true);
     } catch { /* error already surfaced */ }

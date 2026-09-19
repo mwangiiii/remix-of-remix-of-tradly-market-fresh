@@ -251,44 +251,26 @@ function Account() {
   );
 }
 
-// ─── UpgradeCTA (Sub 30 handoff-aware, Sub 31 cookie-sourced) ──────────
+// ─── UpgradeCTA ────────────────────────────────────────────────────────
 //
-// Sub 22 was a plain <a href="…/upgrade">. Sub 30 added a short-lived
-// handoff token in the URL fragment so tradly-flow can skip the login
-// step. Sub 31 moves the token off localStorage (XSS-readable) onto an
-// httpOnly cookie — the button now fetches the token from
-// /api/session/handoff on click and navigates programmatically.
+// Simple redirect to flow's upgrade route. The buyer signs in on the
+// flow side (one extra tap) and then continues into the graduation
+// wizard.
 //
-// Fallback: if the fetch 401s (email/password buyer, or session lost) we
-// send the buyer to a plain /upgrade and they sign in on the flow side.
+// Audit finding C3 (2026-09-19): the previous "handoff-token" mechanism
+// fetched the raw Supabase refresh_token from /api/session/handoff and
+// stuffed it into a URL fragment. That deliberately handed a 30-day
+// session-stealing capability to JavaScript on every /account render,
+// completely defeating the point of the httpOnly cookie. Any XSS on
+// market → one fetch → session drained.
 //
-// URL fragment (not query string): fragments never appear in server logs,
-// Referer headers, or analytics pipes. Same rationale Supabase uses for
-// magic-link tokens.
+// The interim fix: remove the endpoint entirely; degrade the UX by one
+// sign-in tap on flow. Upgrade is a rare action for households, so the
+// added friction is acceptable. A proper signed one-time handoff token
+// (mint on market, consume on flow, single-use, 60s TTL) is the real
+// followup — see plans/auth-audit-2026-09-17.md §C3 for the design.
 function UpgradeCTA() {
   const flowUrl = import.meta.env.VITE_FLOW_URL ?? "https://app.tradly.co.ke";
-  const [handingOff, setHandingOff] = React.useState(false);
-
-  const onClick = React.useCallback(
-    async (e: React.MouseEvent<HTMLAnchorElement>) => {
-      e.preventDefault();
-      if (handingOff) return;
-      setHandingOff(true);
-      let url = `${flowUrl}/upgrade`;
-      try {
-        const res = await fetch("/api/session/handoff", { credentials: "same-origin" });
-        if (res.ok) {
-          const { refresh_token } = (await res.json()) as { refresh_token?: string };
-          if (refresh_token) {
-            const encoded = btoa(refresh_token).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-            url = `${flowUrl}/upgrade#h=${encoded}`;
-          }
-        }
-      } catch { /* fall through to non-handoff URL */ }
-      window.location.href = url;
-    },
-    [flowUrl, handingOff],
-  );
 
   return (
     <section className="mt-5 rounded-2xl border border-trust/30 bg-trust/[0.04] p-5">
@@ -305,11 +287,9 @@ function UpgradeCTA() {
           </p>
           <a
             href={`${flowUrl}/upgrade`}
-            onClick={onClick}
-            aria-disabled={handingOff}
-            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-trust hover:underline aria-disabled:opacity-60"
+            className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-trust hover:underline"
           >
-            {handingOff ? "Signing you in…" : "Start the upgrade"}
+            Start the upgrade
             <ArrowUpRight className="h-3.5 w-3.5" />
           </a>
         </div>
