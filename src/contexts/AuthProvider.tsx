@@ -108,6 +108,35 @@ async function clearMagicRefreshCookie(): Promise<void> {
   } catch { /* ignore */ }
 }
 
+// ─── H3: cross-origin auth broadcast via Supabase Realtime ──────────────
+// H2's BroadcastChannel only reaches tabs on the SAME origin. When a user
+// logs out of super-admin (admin.tradly.co.ke) or flow (app.tradly.co.ke),
+// their market session on market.tradly.co.ke needs to know too — different
+// origins have separate BroadcastChannel namespaces. Supabase Realtime is
+// server-side so any subscriber on the same channel name receives the event
+// regardless of origin.
+//
+// Channel naming: `auth:<user_id>`. Only apps that already know this user's
+// id (i.e. their own signed-in sessions) subscribe. Payload carries no PII,
+// just {event:"logout"} — safe even if the channel were guessable.
+
+function authChannelName(userId: string): string {
+  return `auth:${userId}`;
+}
+
+async function broadcastAuthLogout(userId: string, reason: string): Promise<void> {
+  const channel = getSupabase().channel(authChannelName(userId), {
+    config: { broadcast: { self: false } },
+  });
+  try {
+    await channel.subscribe();
+    await channel.send({ type: "broadcast", event: "logout", payload: { reason } });
+  } finally {
+    // Fire-and-forget cleanup; the tab is about to unload anyway.
+    getSupabase().removeChannel(channel).catch(() => { /* ignore */ });
+  }
+}
+
 const HARD_LOGOUT_CODES: Record<string, true> = {
   AUTH_003: true,
   AUTH_004: true,
@@ -457,6 +486,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (setErr) throw setErr;
       if (!sessionData.session) throw new Error("setSession returned no session");
 
+      // 2b. Audit finding M4: cross-check the JWT's email against what the
+      // user actually typed on /login. Defends against a manipulated URL
+      // that carries a DIFFERENT user's tokens (e.g. phishing site captures
+      // the link and rewrites the destination). If the emails don't match,
+      // sign out immediately and surface a security error — user retries.
+      // The pending email is written to sessionStorage by login.tsx's
+      // submitMagicLink. If it's absent (user clicked the link on a
+      // different device / new browser session), skip the check — the
+      // legitimate cross-device flow must still work.
+      const sessionEmail = sessionData.session.user.email?.toLowerCase() ?? "";
+      let typedEmail: string | null = null;
+      try {
+        typedEmail = window.sessionStorage.getItem("__tradly_market_magic_pending_email");
+      } catch { /* private mode — skip */ }
+      if (typedEmail && sessionEmail && typedEmail.toLowerCase() !== sessionEmail) {
+        // Sign the wrong session back out before throwing.
+        await supabase.auth.signOut().catch(() => { /* best effort */ });
+        clearAuthState();
+        try { window.sessionStorage.removeItem("__tradly_market_magic_pending_email"); } catch { /* ignore */ }
+        throw new Error(
+          "This sign-in link is for a different email. For your security, please request a fresh link.",
+        );
+      }
+      // Success — one-shot, clear immediately so a subsequent attempt
+      // with a stale value can't false-fail.
+      try { window.sessionStorage.removeItem("__tradly_market_magic_pending_email"); } catch { /* ignore */ }
+
       // 3. Stash the token for PostgREST calls
       setTokens(sessionData.session.access_token, sessionData.session.expires_in ?? 3600);
 
@@ -559,6 +615,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           getSupabase().auth.signOut(),
           api.post("/auth-logout", {}).catch(() => { /* idempotent by design */ }),
         ]);
+        // Capture user_id BEFORE clearing so the H3 realtime broadcast can
+        // fan-out to other apps on other origins for the same user.
+        const outgoingUserId = buyer?.id ?? null;
+
         clearAuthState();
         queryClient.clear();
         if (typeof window !== "undefined") {
@@ -574,6 +634,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ch.postMessage({ type: "logout", reason });
             ch.close();
           } catch { /* BroadcastChannel not available (SSR / old browser) */ }
+          // Audit finding H3: cross-origin broadcast via Supabase Realtime.
+          // H2 covers same-origin tabs; H3 extends the same logout signal
+          // to other Tradly apps (flow, super-admin) on other origins that
+          // subscribe to auth:<user_id>. Fire-and-forget — the local tab
+          // is already logged out either way.
+          if (outgoingUserId) {
+            broadcastAuthLogout(outgoingUserId, reason).catch(() => { /* best effort */ });
+          }
           setTimeout(() => {
             window.location.href = "/";
           }, 100);
@@ -582,7 +650,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(false);
       }
     },
-    [clearAuthState, queryClient],
+    [buyer, clearAuthState, queryClient],
   );
 
   // ── bootstrap once (client-only) ────────────────────────────────────────
@@ -682,6 +750,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { /* BroadcastChannel not available */ }
     return () => { try { ch?.close(); } catch { /* ignore */ } };
   }, [clearAuthState, queryClient]);
+
+  // Audit finding H3 — receive cross-ORIGIN logout signal. Subscribes to
+  // supabase.channel("auth:<user_id>") once we know the user_id. When any
+  // other Tradly app (flow, super-admin) broadcasts a logout event for the
+  // same user, we drop the local session too. Complements H2 (same-origin
+  // only via BroadcastChannel).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!buyer?.id) return;
+    const supabase = getSupabase();
+    const channel = supabase.channel(authChannelName(buyer.id), {
+      config: { broadcast: { self: false } },
+    });
+    channel
+      .on("broadcast", { event: "logout" }, () => {
+        clearAuthState();
+        queryClient.clear();
+        try { sessionStorage.setItem(JUST_LOGGED_OUT, "true"); } catch { /* ignore */ }
+        window.location.href = "/";
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel).catch(() => { /* ignore */ });
+    };
+  }, [buyer?.id, clearAuthState, queryClient]);
 
   const value: AuthContextType = {
     isAuthenticated,
