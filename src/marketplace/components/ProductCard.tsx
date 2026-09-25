@@ -7,6 +7,7 @@ import { useCartStore } from "../store/cartStore";
 import { formatKes } from "../lib/format";
 import { getProduct } from "../api/marketplaceApi";
 import { imgUrl, imgSrcSet } from "../lib/img";
+import { minOrderQty } from "../lib/quantity";
 import { Plus } from "lucide-react";
 
 // The grid layout displays the card image at roughly:
@@ -105,10 +106,11 @@ export function ProductCard({
   const effectiveQty = cartLine?.quantity ?? qty;
   const outOfStock = defaultUnit.availability === "out_of_stock";
 
-  // First add uses the product's minimum orderable quantity — for weight
+  // First add uses the product's minimum orderable quantity (the admin
+  // "Minimum order", or the default pack's MOQ when stricter) — for weight
   // products with min 0.5 kg this adds 0.5 kg, not 1. Subsequent bumps
   // via the stepper add qty_step at a time.
-  const initialAddQty = product.minQty ?? 1;
+  const initialAddQty = minOrderQty(product, defaultUnit);
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -129,7 +131,7 @@ export function ProductCard({
       // Pricing-engine hints let /cart's stepper honour weight/piece/pack.
       sellMode: product.sellMode,
       baseUnit: product.baseUnit,
-      minQty: product.minQty,
+      minQty: initialAddQty,
       qtyStep: product.qtyStep,
     });
     setQty(initialAddQty);
@@ -184,7 +186,7 @@ export function ProductCard({
               value={effectiveQty}
               onChange={handleChange}
               size="sm"
-              min={product.minQty}
+              min={initialAddQty}
               step={product.qtyStep}
               sellMode={product.sellMode}
               baseUnit={product.baseUnit}

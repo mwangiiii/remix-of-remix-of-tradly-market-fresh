@@ -8,6 +8,7 @@ import { QuantityStepper } from "../marketplace/components/QuantityStepper";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { FullscreenGallery } from "../marketplace/components/FullscreenGallery";
 import { getCategories, getProduct, getAllProducts } from "../marketplace/api/marketplaceApi";
+import { minOrderQty } from "../marketplace/lib/quantity";
 import type { MarketplaceCategory, MarketplaceProduct } from "../marketplace/types/marketplace";
 import { useCartStore } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
@@ -136,7 +137,7 @@ function ProductDetail() {
   );
   const [galleryIdx, setGalleryIdx] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState(() => minOrderQty(product, initialUnit));
   const [expanded, setExpanded] = useState(false);
   const [canThumbScrollLeft, setCanThumbScrollLeft] = useState(false);
   const [canThumbScrollRight, setCanThumbScrollRight] = useState(false);
@@ -159,12 +160,15 @@ function ProductDetail() {
     unit?.priceKes ??
     0;
 
-  // When the buyer switches pack (or lands on a unit with an MOQ > 1),
-  // snap the quantity up to the minimum the DB says is orderable.
+  // Smallest orderable quantity: the product's "Minimum order" from admin,
+  // or the selected pack's MOQ when that is stricter.
+  const minQty = minOrderQty(product, unit);
+
+  // When the buyer switches pack, or fresh product data arrives with a
+  // new minimum, snap the quantity up to the minimum the DB says is orderable.
   useEffect(() => {
-    if (unit?.moq && qty < unit.moq) setQty(unit.moq);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unit?.id, unit?.moq]);
+    setQty((q) => Math.max(q, minQty));
+  }, [unit?.id, minQty]);
   // Structured media (images + videos) is the source of truth when present;
   // fall back to the legacy image-only gallery_urls for older rows.
   const galleryItems: import("../marketplace/components/FullscreenGallery").GalleryItem[] =
@@ -246,6 +250,7 @@ function ProductDetail() {
 
   const handleAdd = () => {
     if (!unit) return;
+    const quantity = Math.max(qty, minQty);
     addLine({
       productUnitId: unit.id,
       productId: product.id,
@@ -253,15 +258,15 @@ function ProductDetail() {
       thumbnailUrl: product.thumbnailUrl,
       productName: product.name,
       unitLabel: unit.unitLabel,
-      quantity: qty,
+      quantity,
       priceKes: shelfPrice,
       // Pricing-engine hints so /cart's stepper honours weight/piece/pack.
       sellMode: product.sellMode,
       baseUnit: product.baseUnit,
-      minQty: product.minQty,
+      minQty,
       qtyStep: product.qtyStep,
     });
-    toast.success(`Added ${qty} × ${product.name}`, { duration: 1600 });
+    toast.success(`Added ${quantity} × ${product.name}`, { duration: 1600 });
     navigate({ to: "/cart" });
   };
 
@@ -499,8 +504,11 @@ function ProductDetail() {
             <div className="mt-8 hidden items-center gap-3 lg:flex">
               <QuantityStepper
                 value={qty}
-                onChange={(v) => setQty(Math.max(unit.moq ?? 1, v))}
-                min={unit.moq ?? 1}
+                onChange={(v) => setQty(Math.max(minQty, v))}
+                min={minQty}
+                step={product.qtyStep ?? 1}
+                sellMode={product.sellMode}
+                baseUnit={product.baseUnit}
               />
               <button
                 type="button"
@@ -535,8 +543,8 @@ function ProductDetail() {
         <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
           <QuantityStepper
             value={qty}
-            onChange={(v) => setQty(Math.max(unit.moq ?? product.minQty ?? 1, v))}
-            min={unit.moq ?? product.minQty ?? 1}
+            onChange={(v) => setQty(Math.max(minQty, v))}
+            min={minQty}
             step={product.qtyStep ?? 1}
             sellMode={product.sellMode}
             baseUnit={product.baseUnit}

@@ -161,6 +161,9 @@ function CatalogAdmin() {
   const invalidateAll = () => {
     qc.invalidateQueries({ queryKey: ["admin", "products"] });
     qc.invalidateQueries({ queryKey: ["products"] });
+    // Product detail pages cache under ["product", slug] — refresh those too
+    // so edits like the minimum order show up without a hard reload.
+    qc.invalidateQueries({ queryKey: ["product"] });
   };
 
   const [editing, setEditing] = useState<AdminProduct | null>(null);
@@ -252,6 +255,8 @@ function CatalogAdmin() {
     if (!editing) return;
     if (!editing.name.trim()) return toast.error("Name required");
     if (!editing.categoryId) return toast.error("Category required");
+    if (!(editing.minQty > 0)) return toast.error("Minimum order must be greater than 0");
+    if (!(editing.qtyStep > 0)) return toast.error("Step must be greater than 0");
     if (editing.units.length === 0) return toast.error("At least one unit required");
     if (!editing.units.some((u) => u.isDefault))
       return toast.error("One unit must be the default");
@@ -550,10 +555,12 @@ function ProductEditor({
       mode === "by_pack" && !value.packContentsLabel ? "pack" : value.packContentsLabel;
     // Piece/pack require integer qty_step >= 1.
     const nextStep = mode === "by_weight" ? value.qtyStep : Math.max(1, Math.floor(value.qtyStep));
+    const nextMin = mode === "by_weight" ? value.minQty : Math.max(1, Math.ceil(value.minQty));
     onChange({
       ...value,
       sellMode: mode,
       baseUnit: nextBase,
+      minQty: nextMin,
       qtyStep: nextStep,
       packContentsLabel: nextPackLabel,
     });
@@ -724,23 +731,17 @@ function ProductEditor({
                 </select>
               </Field>
               <Field label="Minimum order">
-                <input
-                  type="number"
-                  step={value.sellMode === "by_weight" ? "0.001" : "1"}
-                  min={value.sellMode === "by_weight" ? "0.001" : "1"}
+                <QtyInput
                   value={value.minQty}
-                  onChange={(e) => set({ minQty: Number(e.target.value) || 1 })}
-                  className={inputCls}
+                  decimal={value.sellMode === "by_weight"}
+                  onChange={(n) => set({ minQty: n })}
                 />
               </Field>
               <Field label="Step">
-                <input
-                  type="number"
-                  step={value.sellMode === "by_weight" ? "0.001" : "1"}
-                  min={value.sellMode === "by_weight" ? "0.001" : "1"}
+                <QtyInput
                   value={value.qtyStep}
-                  onChange={(e) => set({ qtyStep: Number(e.target.value) || 1 })}
-                  className={inputCls}
+                  decimal={value.sellMode === "by_weight"}
+                  onChange={(n) => set({ qtyStep: n })}
                 />
               </Field>
             </div>
@@ -1021,6 +1022,37 @@ function ProductEditor({
 
 const inputCls =
   "w-full rounded-lg border border-divider bg-background px-2.5 py-1.5 text-[13px] text-ink focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20";
+
+// Numeric field that keeps the raw text while typing, so partial input like
+// "0." or an empty box isn't snapped back to a number mid-keystroke. Invalid
+// or empty text reports 0, which save() rejects.
+function QtyInput({
+  value,
+  decimal,
+  onChange,
+}: {
+  value: number;
+  decimal: boolean;
+  onChange: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  if (Number(draft) !== value && !(draft === "" && value === 0)) setDraft(String(value));
+  return (
+    <input
+      type="number"
+      inputMode={decimal ? "decimal" : "numeric"}
+      step={decimal ? "0.001" : "1"}
+      min={decimal ? "0.001" : "1"}
+      value={draft}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const n = Number(e.target.value);
+        onChange(Number.isFinite(n) && n > 0 ? n : 0);
+      }}
+      className={inputCls}
+    />
+  );
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (

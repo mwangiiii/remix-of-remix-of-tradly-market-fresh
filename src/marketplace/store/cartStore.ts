@@ -17,17 +17,19 @@ export const useCartStore = create<CartState>()(
       lines: [],
       addLine: (line) =>
         set((state) => {
+          // Never let a line sit below the minimum order the product carries.
+          const floor = line.minQty ?? 0;
           const existing = state.lines.find((l) => l.productUnitId === line.productUnitId);
           if (existing) {
             return {
               lines: state.lines.map((l) =>
                 l.productUnitId === line.productUnitId
-                  ? { ...l, quantity: l.quantity + line.quantity }
+                  ? { ...l, ...line, quantity: Math.max(floor, l.quantity + line.quantity) }
                   : l,
               ),
             };
           }
-          return { lines: [...state.lines, line] };
+          return { lines: [...state.lines, { ...line, quantity: Math.max(floor, line.quantity) }] };
         }),
       setQuantity: (productUnitId, quantity) =>
         set((state) => ({
