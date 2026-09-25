@@ -5,6 +5,7 @@
 // JWT is present (RequireAdmin enforces that at the route boundary).
 
 import { getSupabase } from "@/lib/supabase";
+import { unitImagesSupported, withUnitImagesFallback } from "./unitImagesSupport";
 import type {
   MarketplaceCategory,
   MarketplaceProduct,
@@ -50,6 +51,7 @@ type UnitRow = {
   price_kes: number | string;
   availability: MarketplaceProductUnit["availability"];
   display_order: number;
+  image_urls?: string[] | null;
 };
 
 // Admin uses a LEFT join (not !inner) so unpriced products still appear in
@@ -148,6 +150,7 @@ function mapUnit(r: UnitRow): MarketplaceProductUnit {
     isDefault: r.is_default,
     priceKes: num(r.price_kes),
     availability: r.availability,
+    imageUrls: r.image_urls ?? [],
   };
 }
 
@@ -208,13 +211,15 @@ function mapSchedule(r: ScheduledPriceRow): ScheduledPrice {
 // (effective_to IS NULL). Unlike the storefront (which uses !inner and drops
 // unpriced products), LEFT means unpriced products still appear — we just
 // show the "Unpriced · hidden" badge and force pricing on save.
-const PRODUCT_SELECT = `
+const productSelect = (withUnitImages: boolean) => `
   id, category_id, name, slug, description, origin,
   thumbnail_url, gallery_urls, keywords, is_featured, published,
   sell_mode, base_unit, min_qty, qty_step,
   avg_unit_weight_kg, pack_contents_label, tax_treatment,
   marketplace_product_units (
-    id, product_id, unit_label, unit_qty, is_default, price_kes, availability, display_order
+    id, product_id, unit_label, unit_qty, is_default, price_kes, availability, display_order${
+      withUnitImages ? ", image_urls" : ""
+    }
   ),
   marketplace_price_versions (
     id, cost_rate_kes, shelf_rate_kes, effective_markup_pct, rounding_rule
@@ -285,17 +290,19 @@ export async function adminDeleteCategory(id: string): Promise<void> {
 // ─── Products ────────────────────────────────────────────────────────────
 
 export async function adminListProducts(): Promise<AdminProduct[]> {
-  const { data, error } = await getSupabase()
-    .from("marketplace_products")
-    .select(PRODUCT_SELECT)
-    // Narrow the embedded price_versions rows to the single current row
-    // (effective_to IS NULL). Same filter the storefront uses — but here it
-    // is on a LEFT join so unpriced products still come back (currentPrice
-    // will be null, storefront uses !inner and drops them entirely).
-    .is("marketplace_price_versions.effective_to", null)
-    .order("name", { ascending: true });
+  const { data, error } = await withUnitImagesFallback((withImages) =>
+    getSupabase()
+      .from("marketplace_products")
+      .select(productSelect(withImages))
+      // Narrow the embedded price_versions rows to the single current row
+      // (effective_to IS NULL). Same filter the storefront uses — but here it
+      // is on a LEFT join so unpriced products still come back (currentPrice
+      // will be null, storefront uses !inner and drops them entirely).
+      .is("marketplace_price_versions.effective_to", null)
+      .order("name", { ascending: true }),
+  );
   if (error) throw error;
-  return (data ?? []).map(mapProduct);
+  return ((data ?? []) as unknown as ProductRow[]).map(mapProduct);
 }
 
 export interface ProductInput {
@@ -457,6 +464,30 @@ export interface UnitInput {
   priceKes: number;
   availability: MarketplaceProductUnit["availability"];
   displayOrder?: number;
+  /** Variety-specific images. Omitted = leave the stored images untouched. */
+  imageUrls?: string[];
+}
+
+/**
+ * image_urls payload for a unit write. Skipped when the caller didn't pass
+ * images, or when the column doesn't exist yet (migration not applied) —
+ * unless the admin actually attached images, in which case the write is
+ * attempted so the failure surfaces instead of silently dropping them.
+ */
+function imagesColumn(u: UnitInput): { image_urls?: string[] } {
+  if (u.imageUrls === undefined) return {};
+  if (!unitImagesSupported() && u.imageUrls.length === 0) return {};
+  return { image_urls: u.imageUrls };
+}
+
+/** Swap PostgREST's "unknown column image_urls" for an actionable message. */
+function unitImagesError<E extends { message?: string }>(error: E): E | Error {
+  if ((error.message ?? "").includes("image_urls")) {
+    return new Error(
+      "Variety images need a database update first: run supabase/migrations/20260925120000_marketplace_unit_images.sql, then save again.",
+    );
+  }
+  return error;
 }
 
 export async function adminUpsertUnit(input: UnitInput): Promise<string> {
@@ -469,13 +500,14 @@ export async function adminUpsertUnit(input: UnitInput): Promise<string> {
     price_kes: input.priceKes,
     availability: input.availability,
     display_order: input.displayOrder ?? 0,
+    ...imagesColumn(input),
   };
   const { data, error } = await getSupabase()
     .from("marketplace_product_units")
     .upsert(row, { onConflict: "id" })
     .select("id")
     .single();
-  if (error) throw error;
+  if (error) throw unitImagesError(error);
   return data.id;
 }
 
@@ -527,11 +559,12 @@ export async function adminReplaceUnits(
       price_kes: u.priceKes,
       availability: u.availability,
       display_order: u.displayOrder ?? i,
+      ...imagesColumn(u),
     }));
     const up = await sb
       .from("marketplace_product_units")
       .upsert(payload, { onConflict: "id" });
-    if (up.error) throw up.error;
+    if (up.error) throw unitImagesError(up.error);
   }
 }
 

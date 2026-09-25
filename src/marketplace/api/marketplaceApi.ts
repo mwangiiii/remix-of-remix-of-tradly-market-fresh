@@ -14,6 +14,7 @@
 import { getSupabase } from "@/lib/supabase";
 import { api, apiGet, apiPost } from "@/services/api";
 import { SEARCH_SYNONYMS } from "../config/searchSynonyms";
+import { withUnitImagesFallback } from "./unitImagesSupport";
 import type {
   CartLine,
   CurrentPrice,
@@ -51,6 +52,7 @@ type UnitRow = {
   display_order: number;
   moq: number | string | null;
   case_pack_size: number | string | null;
+  image_urls?: string[] | null;
 };
 
 type MediaRow = {
@@ -106,7 +108,7 @@ type ProductRow = {
   /**
    * Inner-joined + filtered to WHERE effective_to IS NULL — so this array
    * is either exactly one row (the current price version) or the whole
-   * product is excluded from the result set. See PRODUCT_SELECT.
+   * product is excluded from the result set. See productSelect.
    */
   marketplace_price_versions: PriceVersionRow[] | null;
 };
@@ -133,6 +135,7 @@ function mapUnit(row: UnitRow): MarketplaceProductUnit {
     availability: row.availability,
     moq: row.moq == null ? null : num(row.moq),
     casePackSize: row.case_pack_size == null ? null : num(row.case_pack_size),
+    imageUrls: row.image_urls ?? [],
   };
 }
 
@@ -221,7 +224,7 @@ function mapProduct(row: ProductRow): MarketplaceProduct {
 // null) filter on the query side narrows the embed to just the current row.
 // Together they enforce spec §6.3: "A product with no current price version
 // is invisible to the storefront, enforced by the query, not by discipline."
-const PRODUCT_SELECT = `
+const productSelect = (withUnitImages: boolean) => `
   id, category_id, name, slug, description, origin,
   thumbnail_url, gallery_urls, keywords, is_featured,
   sell_mode, base_unit, min_qty, qty_step,
@@ -230,7 +233,7 @@ const PRODUCT_SELECT = `
   country_of_origin, storage_class, shelf_life_days, lead_time_days, order_cutoff_time,
   marketplace_product_units (
     id, unit_label, unit_qty, is_default, price_kes, availability, display_order,
-    moq, case_pack_size
+    moq, case_pack_size${withUnitImages ? ", image_urls" : ""}
   ),
   marketplace_product_media (
     id, url, kind, mime_type, alt_text, poster_url, display_order, is_thumbnail
@@ -254,7 +257,7 @@ export async function getCategories(): Promise<MarketplaceCategory[]> {
 }
 
 // Shared filter: narrow the embedded marketplace_price_versions rows to the
-// single current one. Combined with !inner on the embed (see PRODUCT_SELECT)
+// single current one. Combined with !inner on the embed (see productSelect)
 // this drops products with no current price version from the result — spec
 // §6.3 "A product with no current price version is invisible to the storefront".
 const CURRENT_PRICE_FILTER = "marketplace_price_versions.effective_to" as const;
@@ -268,14 +271,16 @@ const CURRENT_PRICE_FILTER = "marketplace_price_versions.effective_to" as const;
 // thing regardless of caller role.
 
 export async function getAllProducts(): Promise<MarketplaceProduct[]> {
-  const { data, error } = await getSupabase()
-    .from("marketplace_products")
-    .select(PRODUCT_SELECT)
-    .eq("published", true)
-    .is(CURRENT_PRICE_FILTER, null)
-    .order("name", { ascending: true });
+  const { data, error } = await withUnitImagesFallback((withImages) =>
+    getSupabase()
+      .from("marketplace_products")
+      .select(productSelect(withImages))
+      .eq("published", true)
+      .is(CURRENT_PRICE_FILTER, null)
+      .order("name", { ascending: true }),
+  );
   if (error) throw error;
-  return (data ?? []).map(mapProduct);
+  return ((data ?? []) as unknown as ProductRow[]).map(mapProduct);
 }
 
 export async function getProductsByCategory(categorySlug: string): Promise<MarketplaceProduct[]> {
@@ -287,27 +292,32 @@ export async function getProductsByCategory(categorySlug: string): Promise<Marke
     .maybeSingle();
   if (cat.error) throw cat.error;
   if (!cat.data) return [];
-  const { data, error } = await sb
-    .from("marketplace_products")
-    .select(PRODUCT_SELECT)
-    .eq("category_id", cat.data.id)
-    .eq("published", true)
-    .is(CURRENT_PRICE_FILTER, null)
-    .order("name", { ascending: true });
+  const categoryId = cat.data.id;
+  const { data, error } = await withUnitImagesFallback((withImages) =>
+    sb
+      .from("marketplace_products")
+      .select(productSelect(withImages))
+      .eq("category_id", categoryId)
+      .eq("published", true)
+      .is(CURRENT_PRICE_FILTER, null)
+      .order("name", { ascending: true }),
+  );
   if (error) throw error;
-  return (data ?? []).map(mapProduct);
+  return ((data ?? []) as unknown as ProductRow[]).map(mapProduct);
 }
 
 export async function getProduct(slug: string): Promise<MarketplaceProduct | undefined> {
-  const { data, error } = await getSupabase()
-    .from("marketplace_products")
-    .select(PRODUCT_SELECT)
-    .eq("slug", slug)
-    .eq("published", true)
-    .is(CURRENT_PRICE_FILTER, null)
-    .maybeSingle();
+  const { data, error } = await withUnitImagesFallback((withImages) =>
+    getSupabase()
+      .from("marketplace_products")
+      .select(productSelect(withImages))
+      .eq("slug", slug)
+      .eq("published", true)
+      .is(CURRENT_PRICE_FILTER, null)
+      .maybeSingle(),
+  );
   if (error) throw error;
-  return data ? mapProduct(data as ProductRow) : undefined;
+  return data ? mapProduct(data as unknown as ProductRow) : undefined;
 }
 
 export async function searchProducts(query: string): Promise<MarketplaceProduct[]> {
@@ -327,15 +337,17 @@ export async function searchProducts(query: string): Promise<MarketplaceProduct[
     orParts.push(`keywords.cs.{${safe}}`);
   }
   if (orParts.length === 0) return [];
-  const { data, error } = await getSupabase()
-    .from("marketplace_products")
-    .select(PRODUCT_SELECT)
-    .or(orParts.join(","))
-    .eq("published", true)
-    .is(CURRENT_PRICE_FILTER, null)
-    .limit(50);
+  const { data, error } = await withUnitImagesFallback((withImages) =>
+    getSupabase()
+      .from("marketplace_products")
+      .select(productSelect(withImages))
+      .or(orParts.join(","))
+      .eq("published", true)
+      .is(CURRENT_PRICE_FILTER, null)
+      .limit(50),
+  );
   if (error) throw error;
-  return (data ?? []).map(mapProduct);
+  return ((data ?? []) as unknown as ProductRow[]).map(mapProduct);
 }
 
 // ─────────────────────────────────────────────────────────────────────

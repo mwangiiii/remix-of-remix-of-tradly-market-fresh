@@ -89,6 +89,11 @@ export interface MarketplaceProductUnit {
   availability: "available" | "low_stock" | "out_of_stock" | "seasonal";
   moq?: number | null;
   casePackSize?: number | null;
+  /**
+   * Variety-specific images (e.g. a photo of the bucket or the sack).
+   * Empty = show the product gallery when this unit is selected.
+   */
+  imageUrls?: string[];
 }
 
 export type MarketplaceMediaKind = "image" | "video";

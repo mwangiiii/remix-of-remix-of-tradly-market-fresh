@@ -8,8 +8,12 @@ import { QuantityStepper } from "../marketplace/components/QuantityStepper";
 import { ProductCard } from "../marketplace/components/ProductCard";
 import { FullscreenGallery } from "../marketplace/components/FullscreenGallery";
 import { getCategories, getProduct, getAllProducts } from "../marketplace/api/marketplaceApi";
-import { minOrderQty } from "../marketplace/lib/quantity";
-import type { MarketplaceCategory, MarketplaceProduct } from "../marketplace/types/marketplace";
+import { unitQtyRules } from "../marketplace/lib/quantity";
+import type {
+  MarketplaceCategory,
+  MarketplaceProduct,
+  MarketplaceProductUnit,
+} from "../marketplace/types/marketplace";
 import { useCartStore } from "../marketplace/store/cartStore";
 import { formatKes } from "../marketplace/lib/format";
 import {
@@ -137,7 +141,7 @@ function ProductDetail() {
   );
   const [galleryIdx, setGalleryIdx] = useState(0);
   const [zoomOpen, setZoomOpen] = useState(false);
-  const [qty, setQty] = useState(() => minOrderQty(product, initialUnit));
+  const [qty, setQty] = useState(() => unitQtyRules(product, initialUnit).min);
   const [expanded, setExpanded] = useState(false);
   const [canThumbScrollLeft, setCanThumbScrollLeft] = useState(false);
   const [canThumbScrollRight, setCanThumbScrollRight] = useState(false);
@@ -154,25 +158,39 @@ function ProductDetail() {
   // AND the product has a current price version, that shelf wins over the
   // legacy per-unit price. Non-default units keep their unit.priceKes —
   // the engine is per-product/default-unit only.
-  const isDefaultUnit = unit ? unit.isDefault : false;
-  const shelfPrice =
-    (isDefaultUnit ? product.currentPrice?.shelfRateKes : undefined) ??
-    unit?.priceKes ??
-    0;
+  const unitPrice = (u: MarketplaceProductUnit) =>
+    (u.isDefault ? product.currentPrice?.shelfRateKes : undefined) ?? u.priceKes;
+  const shelfPrice = unit ? unitPrice(unit) : 0;
 
-  // Smallest orderable quantity: the product's "Minimum order" from admin,
-  // or the selected pack's MOQ when that is stricter.
-  const minQty = minOrderQty(product, unit);
+  // Quantity rules for the selected variety: the default unit follows the
+  // product's sell mode / "Minimum order" / step from admin; other
+  // varieties (bucket, sack…) are whole packs with their own MOQ.
+  const qtyRules = unitQtyRules(product, unit);
+  const minQty = qtyRules.min;
 
-  // When the buyer switches pack, or fresh product data arrives with a
-  // new minimum, snap the quantity up to the minimum the DB says is orderable.
+  // Switching variety starts over at that variety's minimum (2.5 kg must
+  // not become 2.5 sacks) and shows its own images first.
+  useEffect(() => {
+    setQty(minQty);
+    setGalleryIdx(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unit?.id]);
+  // Fresh product data with a stricter minimum snaps the quantity up.
   useEffect(() => {
     setQty((q) => Math.max(q, minQty));
-  }, [unit?.id, minQty]);
-  // Structured media (images + videos) is the source of truth when present;
+  }, [minQty]);
+  // A variety with its own images (e.g. the sack) shows those. Otherwise
+  // structured media (images + videos) is the source of truth when present;
   // fall back to the legacy image-only gallery_urls for older rows.
+  const unitImages = unit?.imageUrls ?? [];
   const galleryItems: import("../marketplace/components/FullscreenGallery").GalleryItem[] =
-    product.media && product.media.length > 0
+    unitImages.length > 0
+      ? unitImages.map((url) => ({
+          url,
+          kind: "image" as const,
+          altText: `${product.name} — ${unit?.unitLabel}`,
+        }))
+      : product.media && product.media.length > 0
       ? product.media.map((m) => ({
           url: m.url,
           kind: m.kind,
@@ -255,16 +273,16 @@ function ProductDetail() {
       productUnitId: unit.id,
       productId: product.id,
       productSlug: product.slug,
-      thumbnailUrl: product.thumbnailUrl,
+      thumbnailUrl: unitImages[0] ?? product.thumbnailUrl,
       productName: product.name,
       unitLabel: unit.unitLabel,
       quantity,
       priceKes: shelfPrice,
       // Pricing-engine hints so /cart's stepper honours weight/piece/pack.
-      sellMode: product.sellMode,
-      baseUnit: product.baseUnit,
+      sellMode: qtyRules.sellMode,
+      baseUnit: qtyRules.baseUnit,
       minQty,
-      qtyStep: product.qtyStep,
+      qtyStep: qtyRules.step,
     });
     toast.success(`Added ${quantity} × ${product.name}`, { duration: 1600 });
     navigate({ to: "/cart" });
@@ -454,6 +472,9 @@ function ProductDetail() {
             )}
             <p className="mt-4 text-[26px] font-semibold tabular-nums text-ink lg:text-[32px]">
               {formatKes(shelfPrice)}
+              <span className="ml-1.5 text-[14px] font-medium text-ink-muted lg:text-[16px]">
+                / {unit.unitLabel}
+              </span>
             </p>
 
             <p className={`mt-5 text-[15px] leading-relaxed text-ink-muted ${expanded ? "" : "line-clamp-3 lg:line-clamp-none"}`}>
@@ -470,24 +491,39 @@ function ProductDetail() {
             )}
 
             <div className="mt-6">
-              <p className="mb-2 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-muted">Choose a pack</p>
+              <p className="mb-2 text-[12px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+                {product.units.length > 1 ? "Choose how you buy" : "Pack"}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {product.units.map((u) => {
                   const active = u.id === selectedUnitId;
                   const disabled = u.availability === "out_of_stock";
+                  const thumb = u.imageUrls?.[0];
                   return (
                     <button
                       key={u.id}
                       type="button"
                       onClick={() => !disabled && setSelectedUnitId(u.id)}
                       disabled={disabled}
-                      className={`rounded-full border px-4 py-2 text-[13px] font-medium transition-colors ${
+                      aria-pressed={active}
+                      className={`inline-flex items-center gap-2 rounded-full border py-2 text-[13px] font-medium transition-colors ${
+                        thumb ? "pl-1.5 pr-4" : "px-4"
+                      } ${
                         active
                           ? "border-ink bg-ink text-background"
                           : "border-divider bg-surface text-ink hover:border-ink/40"
                       } ${disabled ? "cursor-not-allowed opacity-40" : ""}`}
                     >
-                      {u.unitLabel} · {formatKes(u.priceKes)}
+                      {thumb && (
+                        <img
+                          src={imgUrl(thumb, { width: 64 })}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-6 w-6 rounded-full object-cover"
+                        />
+                      )}
+                      {u.unitLabel} · {formatKes(unitPrice(u))}
                     </button>
                   );
                 })}
@@ -506,9 +542,9 @@ function ProductDetail() {
                 value={qty}
                 onChange={(v) => setQty(Math.max(minQty, v))}
                 min={minQty}
-                step={product.qtyStep ?? 1}
-                sellMode={product.sellMode}
-                baseUnit={product.baseUnit}
+                step={qtyRules.step}
+                sellMode={qtyRules.sellMode}
+                baseUnit={qtyRules.baseUnit}
               />
               <button
                 type="button"
@@ -545,9 +581,9 @@ function ProductDetail() {
             value={qty}
             onChange={(v) => setQty(Math.max(minQty, v))}
             min={minQty}
-            step={product.qtyStep ?? 1}
-            sellMode={product.sellMode}
-            baseUnit={product.baseUnit}
+            step={qtyRules.step}
+            sellMode={qtyRules.sellMode}
+            baseUnit={qtyRules.baseUnit}
           />
           <button
             type="button"

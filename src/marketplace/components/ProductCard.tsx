@@ -7,7 +7,7 @@ import { useCartStore } from "../store/cartStore";
 import { formatKes } from "../lib/format";
 import { getProduct } from "../api/marketplaceApi";
 import { imgUrl, imgSrcSet } from "../lib/img";
-import { minOrderQty } from "../lib/quantity";
+import { unitQtyRules } from "../lib/quantity";
 import { Plus } from "lucide-react";
 
 // The grid layout displays the card image at roughly:
@@ -110,7 +110,9 @@ export function ProductCard({
   // "Minimum order", or the default pack's MOQ when stricter) — for weight
   // products with min 0.5 kg this adds 0.5 kg, not 1. Subsequent bumps
   // via the stepper add qty_step at a time.
-  const initialAddQty = minOrderQty(product, defaultUnit);
+  const rules = unitQtyRules(product, defaultUnit);
+  const initialAddQty = rules.min;
+  const otherOptions = product.units.length - 1;
 
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -129,10 +131,10 @@ export function ProductCard({
       // the product hasn't been priced in the new engine yet.
       priceKes: product.currentPrice?.shelfRateKes ?? defaultUnit.priceKes,
       // Pricing-engine hints let /cart's stepper honour weight/piece/pack.
-      sellMode: product.sellMode,
-      baseUnit: product.baseUnit,
+      sellMode: rules.sellMode,
+      baseUnit: rules.baseUnit,
       minQty: initialAddQty,
-      qtyStep: product.qtyStep,
+      qtyStep: rules.step,
     });
     setQty(initialAddQty);
   };
@@ -167,7 +169,12 @@ export function ProductCard({
       <div className="mt-2.5 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[15px] font-semibold text-ink">{product.name}</h3>
-          <p className="mt-0.5 text-[12px] text-ink-muted">{defaultUnit.unitLabel}</p>
+          <p className="mt-0.5 truncate text-[12px] text-ink-muted">
+            {defaultUnit.unitLabel}
+            {otherOptions > 0 && (
+              <span className="text-ink"> · +{otherOptions} more option{otherOptions > 1 ? "s" : ""}</span>
+            )}
+          </p>
           <p className="mt-1 text-[17px] font-bold text-farm">{formatKes(shelfPriceKes)}</p>
         </div>
         <div className="pt-1" onClick={(e) => e.preventDefault()}>
@@ -187,9 +194,9 @@ export function ProductCard({
               onChange={handleChange}
               size="sm"
               min={initialAddQty}
-              step={product.qtyStep}
-              sellMode={product.sellMode}
-              baseUnit={product.baseUnit}
+              step={rules.step}
+              sellMode={rules.sellMode}
+              baseUnit={rules.baseUnit}
             />
           )}
         </div>

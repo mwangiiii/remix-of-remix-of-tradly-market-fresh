@@ -217,6 +217,7 @@ function CatalogAdmin() {
         priceKes: u.priceKes,
         availability: u.availability,
         displayOrder: i,
+        imageUrls: u.imageUrls ?? [],
       }));
       await adminReplaceUnits(productId, unitPayload);
       // If the editor supplied a pricing update, write a new price version.
@@ -257,9 +258,11 @@ function CatalogAdmin() {
     if (!editing.categoryId) return toast.error("Category required");
     if (!(editing.minQty > 0)) return toast.error("Minimum order must be greater than 0");
     if (!(editing.qtyStep > 0)) return toast.error("Step must be greater than 0");
-    if (editing.units.length === 0) return toast.error("At least one unit required");
+    if (editing.units.length === 0) return toast.error("At least one variety required");
+    if (editing.units.some((u) => !u.unitLabel.trim()))
+      return toast.error("Every variety needs a name");
     if (!editing.units.some((u) => u.isDefault))
-      return toast.error("One unit must be the default");
+      return toast.error("One variety must be the default");
     saveProduct.mutate({ product: editing, pricing });
   };
 
@@ -972,43 +975,73 @@ function ProductEditor({
             </p>
           </section>
 
-          {/* Units */}
+          {/* Varieties (units) — each with its own price, availability and images */}
           <section>
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">Packaging & pricing</p>
+            <div className="mb-1 flex items-center justify-between">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-ink-muted">
+                Varieties, packaging & pricing
+              </p>
               <button
-                onClick={() => onChange({ ...value, units: [...value.units, newUnitDraft({ isDefault: value.units.length === 0 })] })}
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    units: [
+                      ...value.units,
+                      newUnitDraft({ unitLabel: "", isDefault: value.units.length === 0 }),
+                    ],
+                  })
+                }
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink hover:underline"
               >
-                <Plus className="h-3 w-3" /> Add unit
+                <Plus className="h-3 w-3" /> Add variety
               </button>
             </div>
+            <p className="mb-2 text-[11px] text-ink-muted">
+              e.g. Potatoes: per kg (default), Bucket, Sack. Buyers pick one on the product page.
+              The default variety is priced by the pricing section above and follows the
+              minimum order / step; the others use their own price and are ordered as whole units.
+            </p>
             <div className="space-y-2">
               {value.units.map((u) => (
-                <div key={u.id} className="grid grid-cols-[1fr_80px_1fr_130px_auto_auto] items-center gap-2 rounded-xl border border-divider bg-surface p-2.5">
-                  <input value={u.unitLabel} onChange={(e) => setUnit(u.id, { unitLabel: e.target.value })} placeholder="Label (e.g. 10 KG Bag)" className={inputCls} />
-                  <input type="number" step="0.001" value={u.unitQty} onChange={(e) => setUnit(u.id, { unitQty: Number(e.target.value) || 0 })} className={inputCls} />
-                  <input type="number" step="0.01" value={u.priceKes} onChange={(e) => setUnit(u.id, { priceKes: Number(e.target.value) || 0 })} placeholder="Price KES" className={inputCls} />
-                  <select
-                    value={u.availability}
-                    onChange={(e) => setUnit(u.id, { availability: e.target.value as MarketplaceProductUnit["availability"] })}
-                    className={inputCls}
-                  >
-                    <option value="available">Available</option>
-                    <option value="low_stock">Low stock</option>
-                    <option value="out_of_stock">Out of stock</option>
-                    <option value="seasonal">Seasonal</option>
-                  </select>
-                  <label className="flex items-center gap-1 text-[11px] font-medium text-ink-muted">
-                    <input type="radio" name="default-unit" checked={u.isDefault} onChange={() => setDefaultUnit(u.id)} />
-                    Default
-                  </label>
-                  <button
-                    onClick={() => onChange({ ...value, units: value.units.filter((x) => x.id !== u.id) })}
-                    disabled={value.units.length <= 1}
-                    className="grid h-8 w-8 place-items-center rounded-full text-ink-muted hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
-                    aria-label="Remove unit"
-                  ><Trash2 className="h-3.5 w-3.5" /></button>
+                <div key={u.id} className="rounded-xl border border-divider bg-surface p-2.5">
+                  <div className="grid grid-cols-[1fr_80px_1fr_130px_auto_auto] items-end gap-2">
+                    <Field label="Name">
+                      <input value={u.unitLabel} onChange={(e) => setUnit(u.id, { unitLabel: e.target.value })} placeholder="e.g. Sack (90 kg)" className={inputCls} />
+                    </Field>
+                    <Field label="Qty">
+                      <input type="number" step="0.001" value={u.unitQty} onChange={(e) => setUnit(u.id, { unitQty: Number(e.target.value) || 0 })} className={inputCls} />
+                    </Field>
+                    <Field label={u.isDefault && value.currentPrice ? "Price (engine sets)" : "Price KES"}>
+                      <input type="number" step="0.01" value={u.priceKes} onChange={(e) => setUnit(u.id, { priceKes: Number(e.target.value) || 0 })} placeholder="Price KES" className={inputCls} />
+                    </Field>
+                    <Field label="Availability">
+                      <select
+                        value={u.availability}
+                        onChange={(e) => setUnit(u.id, { availability: e.target.value as MarketplaceProductUnit["availability"] })}
+                        className={inputCls}
+                      >
+                        <option value="available">Available</option>
+                        <option value="low_stock">Low stock</option>
+                        <option value="out_of_stock">Out of stock</option>
+                        <option value="seasonal">Seasonal</option>
+                      </select>
+                    </Field>
+                    <label className="flex items-center gap-1 pb-2 text-[11px] font-medium text-ink-muted">
+                      <input type="radio" name="default-unit" checked={u.isDefault} onChange={() => setDefaultUnit(u.id)} />
+                      Default
+                    </label>
+                    <button
+                      onClick={() => onChange({ ...value, units: value.units.filter((x) => x.id !== u.id) })}
+                      disabled={value.units.length <= 1}
+                      className="mb-0.5 grid h-8 w-8 place-items-center rounded-full text-ink-muted hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                      aria-label="Remove variety"
+                    ><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <UnitImages
+                    urls={u.imageUrls ?? []}
+                    slug={value.slug || slugify(value.name || "unfiled")}
+                    onChange={(imageUrls) => setUnit(u.id, { imageUrls })}
+                  />
                 </div>
               ))}
             </div>
@@ -1022,6 +1055,64 @@ function ProductEditor({
 
 const inputCls =
   "w-full rounded-lg border border-divider bg-background px-2.5 py-1.5 text-[13px] text-ink focus:border-trust focus:outline-none focus:ring-2 focus:ring-trust/20";
+
+// Images for one variety (e.g. photos of the bucket). Shown on the product
+// page when the buyer selects this variety; empty = product gallery.
+function UnitImages({
+  urls,
+  slug,
+  onChange,
+}: {
+  urls: string[];
+  slug: string;
+  onChange: (urls: string[]) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of files) uploaded.push(await adminUploadImage(file, slug));
+      onChange([...urls, ...uploaded]);
+      toast.success(uploaded.length > 1 ? `${uploaded.length} images uploaded` : "Image uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      {urls.map((url, i) => (
+        <div key={`${url}-${i}`} className="group relative h-14 w-14 overflow-hidden rounded-lg border border-divider bg-muted">
+          <img src={url} alt="" className="h-full w-full object-cover" />
+          <button
+            type="button"
+            onClick={() => onChange(urls.filter((_, j) => j !== i))}
+            className="absolute right-0.5 top-0.5 hidden h-5 w-5 place-items-center rounded-full bg-black/60 text-white group-hover:grid"
+            aria-label="Remove image"
+          ><X className="h-3 w-3" /></button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+        className="inline-flex h-14 items-center gap-1.5 rounded-lg border border-dashed border-divider px-3 text-[11px] font-semibold text-ink-muted hover:border-ink/40 hover:text-ink disabled:opacity-60"
+      >
+        <Upload className="h-3.5 w-3.5" />
+        {uploading ? "Uploading…" : urls.length > 0 ? "Add image" : "Variety images (optional)"}
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" multiple onChange={handleFiles} className="hidden" />
+    </div>
+  );
+}
 
 // Numeric field that keeps the raw text while typing, so partial input like
 // "0." or an empty box isn't snapped back to a number mid-keystroke. Invalid
