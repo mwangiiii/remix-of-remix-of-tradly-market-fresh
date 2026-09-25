@@ -49,6 +49,7 @@ import { Route as OrderIdIndexRouteImport } from './routes/order.$id.index'
 import { Route as OrderIdConfirmationRouteImport } from './routes/order.$id.confirmation'
 import { Route as ApiSessionStoreRouteImport } from './routes/api.session.store'
 import { Route as ApiSessionRefreshRouteImport } from './routes/api.session.refresh'
+import { Route as ApiSessionHandoffRouteImport } from './routes/api.session.handoff'
 import { Route as ApiSessionClearRouteImport } from './routes/api.session.clear'
 import { Route as ApiAuthRefreshRouteImport } from './routes/api.auth.refresh'
 import { Route as ApiAuthLoginRouteImport } from './routes/api.auth.login'
@@ -254,6 +255,11 @@ const ApiSessionRefreshRoute = ApiSessionRefreshRouteImport.update({
   path: '/api/session/refresh',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSessionHandoffRoute = ApiSessionHandoffRouteImport.update({
+  id: '/api/session/handoff',
+  path: '/api/session/handoff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionClearRoute = ApiSessionClearRouteImport.update({
   id: '/api/session/clear',
   path: '/api/session/clear',
@@ -315,6 +321,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/refresh': typeof ApiAuthRefreshRoute
   '/api/session/clear': typeof ApiSessionClearRoute
+  '/api/session/handoff': typeof ApiSessionHandoffRoute
   '/api/session/refresh': typeof ApiSessionRefreshRoute
   '/api/session/store': typeof ApiSessionStoreRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
@@ -361,6 +368,7 @@ export interface FileRoutesByTo {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/refresh': typeof ApiAuthRefreshRoute
   '/api/session/clear': typeof ApiSessionClearRoute
+  '/api/session/handoff': typeof ApiSessionHandoffRoute
   '/api/session/refresh': typeof ApiSessionRefreshRoute
   '/api/session/store': typeof ApiSessionStoreRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
@@ -408,6 +416,7 @@ export interface FileRoutesById {
   '/api/auth/login': typeof ApiAuthLoginRoute
   '/api/auth/refresh': typeof ApiAuthRefreshRoute
   '/api/session/clear': typeof ApiSessionClearRoute
+  '/api/session/handoff': typeof ApiSessionHandoffRoute
   '/api/session/refresh': typeof ApiSessionRefreshRoute
   '/api/session/store': typeof ApiSessionStoreRoute
   '/order/$id/confirmation': typeof OrderIdConfirmationRoute
@@ -456,6 +465,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/refresh'
     | '/api/session/clear'
+    | '/api/session/handoff'
     | '/api/session/refresh'
     | '/api/session/store'
     | '/order/$id/confirmation'
@@ -502,6 +512,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/refresh'
     | '/api/session/clear'
+    | '/api/session/handoff'
     | '/api/session/refresh'
     | '/api/session/store'
     | '/order/$id/confirmation'
@@ -548,6 +559,7 @@ export interface FileRouteTypes {
     | '/api/auth/login'
     | '/api/auth/refresh'
     | '/api/session/clear'
+    | '/api/session/handoff'
     | '/api/session/refresh'
     | '/api/session/store'
     | '/order/$id/confirmation'
@@ -592,6 +604,7 @@ export interface RootRouteChildren {
   ApiAuthLoginRoute: typeof ApiAuthLoginRoute
   ApiAuthRefreshRoute: typeof ApiAuthRefreshRoute
   ApiSessionClearRoute: typeof ApiSessionClearRoute
+  ApiSessionHandoffRoute: typeof ApiSessionHandoffRoute
   ApiSessionRefreshRoute: typeof ApiSessionRefreshRoute
   ApiSessionStoreRoute: typeof ApiSessionStoreRoute
   OrderIdConfirmationRoute: typeof OrderIdConfirmationRoute
@@ -881,6 +894,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionRefreshRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/session/handoff': {
+      id: '/api/session/handoff'
+      path: '/api/session/handoff'
+      fullPath: '/api/session/handoff'
+      preLoaderRoute: typeof ApiSessionHandoffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/session/clear': {
       id: '/api/session/clear'
       path: '/api/session/clear'
@@ -964,6 +984,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthLoginRoute: ApiAuthLoginRoute,
   ApiAuthRefreshRoute: ApiAuthRefreshRoute,
   ApiSessionClearRoute: ApiSessionClearRoute,
+  ApiSessionHandoffRoute: ApiSessionHandoffRoute,
   ApiSessionRefreshRoute: ApiSessionRefreshRoute,
   ApiSessionStoreRoute: ApiSessionStoreRoute,
   OrderIdConfirmationRoute: OrderIdConfirmationRoute,
