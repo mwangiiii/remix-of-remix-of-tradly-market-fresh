@@ -15,6 +15,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
+import { rejectForeignOrigin } from "@/server/originCheck";
 
 const COOKIE_NAME = "tradly_market_refresh";
 const COOKIE_TTL_S = 30 * 24 * 3600;
@@ -54,6 +55,13 @@ export const Route = createFileRoute("/api/session/refresh")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // Audit finding L3 — Origin allowlist. Refresh is the highest-
+        // frequency session endpoint; locking it down protects against
+        // a foreign origin triggering silent token rotations that would
+        // invalidate the user's real session.
+        const forbidden = rejectForeignOrigin(request);
+        if (forbidden) return forbidden;
+
         const refreshToken = parseCookie(request.headers.get("cookie"), COOKIE_NAME);
         if (!refreshToken) {
           // Audit finding M1: always send Set-Cookie: expire on 401 so a

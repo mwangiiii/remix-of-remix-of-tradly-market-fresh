@@ -22,6 +22,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
+import { rejectForeignOrigin } from "@/server/originCheck";
 
 const FUNCTIONS_URL = process.env.VITE_SUPABASE_FUNCTIONS_URL ?? "";
 const COOKIE_NAME   = "tradly_refresh";
@@ -37,6 +38,11 @@ export const Route = createFileRoute("/api/auth/login")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // Audit finding L3 — Origin allowlist. Blocks cross-site POSTs
+        // that would otherwise be able to probe credentials via this proxy.
+        const forbidden = rejectForeignOrigin(request);
+        if (forbidden) return forbidden;
+
         if (!FUNCTIONS_URL) {
           return jsonResponse({ error: "server misconfigured" }, { status: 500 });
         }

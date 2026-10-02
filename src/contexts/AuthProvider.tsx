@@ -11,6 +11,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -237,7 +238,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   //   2. Email/password refresh — POST /auth-refresh which reads the
   //      Tradly-refresh httpOnly cookie set by /auth-login.
   // If both fail: anonymous.
+  // Audit finding L2: de-dupe guard against concurrent silentRefresh calls.
+  //
+  // Scenarios this defends against:
+  //  - React 18 StrictMode double-fires effects in dev (bootstrap useEffect
+  //    runs twice, the second launch would race the first)
+  //  - An error boundary re-mounts AuthProvider while a bootstrap refresh
+  //    is still in-flight — both concurrent calls would hit /api/session/*
+  //    and whichever rotated token lands first would be invalidated by the
+  //    second (Supabase rotates refresh_tokens on use)
+  //
+  // Second-and-subsequent calls while one is in-flight resolve immediately
+  // with no side effects; the in-flight call's resolution is authoritative.
+  const silentRefreshInFlightRef = useRef(false);
+
   const silentRefresh = useCallback(async () => {
+    if (silentRefreshInFlightRef.current) return;
+    silentRefreshInFlightRef.current = true;
     try {
       setIsInitializing(true);
 
@@ -292,6 +309,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsInitializing(false);
       useAuthStore.getState().setInitialized();
+      silentRefreshInFlightRef.current = false;
     }
   }, [clearAuthState, setTokens]);
 
@@ -642,6 +660,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (outgoingUserId) {
             broadcastAuthLogout(outgoingUserId, reason).catch(() => { /* best effort */ });
           }
+          // Audit finding L1: hard reload is intentional, not an oversight.
+          // A client-side router navigate would keep this JS context alive —
+          // the Zustand store is cleared, but any closure that captured the
+          // old access token (in-flight fetches, timer callbacks) still holds
+          // it. A full page load discards the entire JS heap, guaranteeing
+          // no stale token can leak into the post-logout surface. 100ms
+          // delay lets the H2 BroadcastChannel + H3 Realtime send actually
+          // flush before the tab navigates.
           setTimeout(() => {
             window.location.href = "/";
           }, 100);

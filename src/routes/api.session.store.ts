@@ -20,6 +20,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
+import { rejectForeignOrigin } from "@/server/originCheck";
 
 const COOKIE_NAME = "tradly_market_refresh";
 const COOKIE_TTL_S = 30 * 24 * 3600;   // 30 days — mirrors Supabase's default
@@ -34,6 +35,11 @@ export const Route = createFileRoute("/api/session/store")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // Audit finding L3 — Origin allowlist as defence in depth on top
+        // of SameSite=Lax. 403 for anything we don't recognise.
+        const forbidden = rejectForeignOrigin(request);
+        if (forbidden) return forbidden;
+
         let body: { refresh_token?: string };
         try {
           body = await request.json() as { refresh_token?: string };

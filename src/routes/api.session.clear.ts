@@ -8,13 +8,20 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
+import { rejectForeignOrigin } from "@/server/originCheck";
 
 const COOKIE_NAME = "tradly_market_refresh";
 
 export const Route = createFileRoute("/api/session/clear")({
   server: {
     handlers: {
-      POST: async () => {
+      POST: async ({ request }) => {
+        // Audit finding L3 — reject foreign origins. Clearing another
+        // origin's session cookie wouldn't help anyone, but a 403 means
+        // the request never produces a Set-Cookie we didn't intend.
+        const forbidden = rejectForeignOrigin(request);
+        if (forbidden) return forbidden;
+
         const expire =
           `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
         return new Response(null, {
